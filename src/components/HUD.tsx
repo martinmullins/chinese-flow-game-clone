@@ -1,17 +1,19 @@
-import { formatTime } from '../data'
+import { formatTime, getStreakMultiplier } from '../data'
 
 interface Props {
   score: number
   lives: number
+  maxLives?: number   // 0 = hide hearts entirely
   timeLeft: number
   correct: number
   wrong: number
+  streak?: number
   onMenu: () => void
 }
 
-export default function HUD({ score, lives, timeLeft, correct, wrong, onMenu }: Props) {
+export default function HUD({ score, lives, maxLives = 3, timeLeft, correct, wrong, streak = 0, onMenu }: Props) {
   const isUrgent = timeLeft <= 30
-  const hearts = Array.from({ length: 3 }, (_, i) => i < lives ? '❤️' : '🖤')
+  const mult = getStreakMultiplier(streak)
 
   return (
     <div className="hud">
@@ -28,6 +30,13 @@ export default function HUD({ score, lives, timeLeft, correct, wrong, onMenu }: 
         <span className="score-val">{score}</span>
       </div>
 
+      {streak >= 3 && (
+        <div className="hud-streak">
+          <span className="streak-count">🔥{streak}</span>
+          <span className="streak-mult">×{mult}</span>
+        </div>
+      )}
+
       <div className="hud-spacer" />
 
       <div className="hud-stat">
@@ -40,9 +49,13 @@ export default function HUD({ score, lives, timeLeft, correct, wrong, onMenu }: 
         <span className="stat-val wrong">{wrong}</span>
       </div>
 
-      <div className="hud-lives">
-        {hearts.map((h, i) => <span key={i}>{h}</span>)}
-      </div>
+      {maxLives > 0 && (
+        <div className="hud-lives">
+          {Array.from({ length: maxLives }, (_, i) => (
+            <span key={i}>{i < lives ? '❤️' : '🖤'}</span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

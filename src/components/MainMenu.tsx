@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GameSettings, HskLevel, GameMode, MatchType } from '../types'
+import { GameSettings, HskLevel, GameMode, MatchType, GameVariant } from '../types'
 import { getWords } from '../data'
 
 interface Props {
@@ -33,6 +33,27 @@ const MODES: { id: GameMode; icon: string; name: string; desc: string }[] = [
 ]
 
 const DURATIONS = [60, 120, 180, 300]
+
+const VARIANTS: { id: GameVariant; icon: string; name: string; desc: string }[] = [
+  {
+    id: 'standard',
+    icon: '🎮',
+    name: 'Standard',
+    desc: 'Timed session. Wrong answers cost a life.',
+  },
+  {
+    id: 'time-attack',
+    icon: '⏱️',
+    name: 'Time Attack',
+    desc: 'Correct +5 s · Wrong −3 s. Start with 30 s. Chain a streak to multiply your score.',
+  },
+  {
+    id: 'sudden-death',
+    icon: '💀',
+    name: 'Sudden Death',
+    desc: 'One wrong answer ends the game. How far can you go?',
+  },
+]
 
 export default function MainMenu({ settings, onStart }: Props) {
   const [s, setS] = useState<GameSettings>(settings)
@@ -122,6 +143,26 @@ export default function MainMenu({ settings, onStart }: Props) {
           </div>
         </div>
 
+        {/* Game Variant */}
+        <div className="menu-section">
+          <h2>Variant</h2>
+          <div className="mode-grid">
+            {VARIANTS.map(v => (
+              <button
+                key={v.id}
+                className={`mode-btn ${s.gameVariant === v.id ? 'active' : ''}`}
+                onClick={() => setS(prev => ({ ...prev, gameVariant: v.id }))}
+              >
+                <span className="mode-icon">{v.icon}</span>
+                <span className="mode-info">
+                  <span className="mode-name">{v.name}</span>
+                  <span className="mode-desc">{v.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Options */}
         <div className="menu-section">
           <h2>Options</h2>
@@ -149,22 +190,24 @@ export default function MainMenu({ settings, onStart }: Props) {
               Show pinyin hint on Chinese cards
             </label>
 
-            <div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: 8 }}>
-                Game Duration
+            {s.gameVariant !== 'time-attack' && (
+              <div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: 8 }}>
+                  Game Duration
+                </div>
+                <div className="duration-select">
+                  {DURATIONS.map(d => (
+                    <button
+                      key={d}
+                      className={`dur-btn ${s.gameDuration === d ? 'active' : ''}`}
+                      onClick={() => setS(prev => ({ ...prev, gameDuration: d }))}
+                    >
+                      {d < 60 ? `${d}s` : `${d / 60}m`}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="duration-select">
-                {DURATIONS.map(d => (
-                  <button
-                    key={d}
-                    className={`dur-btn ${s.gameDuration === d ? 'active' : ''}`}
-                    onClick={() => setS(prev => ({ ...prev, gameDuration: d }))}
-                  >
-                    {d < 60 ? `${d}s` : `${d / 60}m`}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 

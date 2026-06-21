@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, getDistractors, shuffle } from '../data'
+import { getWords, getDistractors, shuffle, getStreakMultiplier } from '../data'
 import HUD from './HUD'
 
 interface Props {
@@ -10,22 +10,31 @@ interface Props {
 }
 
 interface FallingWord {
-  id: string          // unique instance id
+  id: string
   word: VocabWord
-  x: number           // percentage 5-85
-  y: number           // percentage 0-100
-  speed: number       // % per second
+  x: number
+  y: number
+  speed: number
   state: 'falling' | 'selected' | 'hit' | 'miss'
   choices: VocabWord[]
   correctIdx: number
 }
 
-const SPAWN_INTERVAL = 3000  // ms between new words
-const CHOICE_COUNT = 4
+const SPAWN_INTERVAL = 3000
+const CHOICE_COUNT   = 4
+
+const TIME_ATTACK_START   = 30
+const TIME_ATTACK_CORRECT = 5
+const TIME_ATTACK_WRONG   = 3
 
 let instanceCounter = 0
 
 export default function RainGame({ settings, onGameOver, onMenu }: Props) {
+  const isTimeAttack  = settings.gameVariant === 'time-attack'
+  const isSuddenDeath = settings.gameVariant === 'sudden-death'
+  const initLives     = isSuddenDeath ? 1 : 5
+  const initTime      = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
+
   const [, setWords]              = useState<VocabWord[]>([])
   const [peekedChoices, setPeekedChoices] = useState<Set<number>>(new Set())
   const [falling, setFalling]     = useState<FallingWord[]>([])
@@ -33,18 +42,22 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
   const [choiceAnim, setChoiceAnim] = useState<Record<number, 'correct' | 'wrong'>>({})
 
   const [score, setScore]           = useState(0)
-  const [lives, setLives]           = useState(5)
+  const [lives, setLives]           = useState(initLives)
+  const [streak, setStreak]         = useState(0)
   const [correct, setCorrect]       = useState(0)
   const [wrong, setWrong]           = useState(0)
-  const [totalTime, setTotalTime]   = useState(settings.gameDuration)
+  const [totalTime, setTotalTime]   = useState(initTime)
   const [isActive, setIsActive]     = useState(false)
   const [correctWords, setCorrectWords] = useState<VocabWord[]>([])
   const [wrongWords, setWrongWords]     = useState<VocabWord[]>([])
 
-  const poolRef  = useRef<VocabWord[]>([])
-  const allRef   = useRef<VocabWord[]>([])
-  const livesRef = useRef(5)
-  const doneRef  = useRef(false)
+  const poolRef      = useRef<VocabWord[]>([])
+  const allRef       = useRef<VocabWord[]>([])
+  const livesRef     = useRef(initLives)
+  const streakRef    = useRef(0)
+  const maxStreakRef = useRef(0)
+  const elapsedRef   = useRef(0)
+  const doneRef      = useRef(false)
 
   // ── Init ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -58,7 +71,10 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
   // ── Overall timer ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isActive) return
-    const t = setTimeout(() => setTotalTime(s => s - 1), 1000)
+    const t = setTimeout(() => {
+      setTotalTime(s => s - 1)
+      elapsedRef.current += 1
+    }, 1000)
     return () => clearTimeout(t)
   }, [isActive, totalTime])
 
@@ -66,28 +82,21 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
     if (totalTime <= 0 && isActive) endGame()
   }, [totalTime])
 
-  // ── Physics tick (60fps approx) ──────────────────────────────────────────
+  // ── Physics tick ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isActive) return
-    const TICK = 50 // ms
+    const TICK = 50
     const interval = setInterval(() => {
       setFalling(prev => {
         const next: FallingWord[] = []
         let missed = 0
 
         for (const fw of prev) {
-          if (fw.state === 'hit' || fw.state === 'miss') {
-            next.push(fw)
-            continue
-          }
-          if (fw.state === 'selected') {
-            next.push(fw)
-            continue
-          }
-          // falling
+          if (fw.state === 'hit' || fw.state === 'miss') { next.push(fw); continue }
+          if (fw.state === 'selected') { next.push(fw); continue }
+
           const newY = fw.y + fw.speed * (TICK / 1000)
           if (newY > 100) {
-            // missed!
             missed++
             next.push({ ...fw, state: 'miss', y: 100 })
             setTimeout(() => {
@@ -99,9 +108,12 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
         }
 
         if (missed > 0) {
+          streakRef.current = 0
+          setStreak(0)
           livesRef.current -= missed
           setLives(livesRef.current)
           setWrong(s => s + missed)
+          if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG * missed, 0))
           if (livesRef.current <= 0) endGame()
         }
 
@@ -110,7 +122,7 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
     }, TICK)
 
     return () => clearInterval(interval)
-  }, [isActive])
+  }, [isActive, isTimeAttack])
 
   // ── Spawn words ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -157,14 +169,16 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
         score,
         correct,
         wrong,
-        timeUsed: settings.gameDuration - totalTime,
+        timeUsed: elapsedRef.current,
         gameMode: 'rain',
         hskLevels: settings.hskLevels,
         correctWords,
         wrongWords,
+        maxStreak: maxStreakRef.current,
+        gameVariant: settings.gameVariant,
       })
     }, 800)
-  }, [score, correct, wrong, totalTime, correctWords, wrongWords])
+  }, [score, correct, wrong, correctWords, wrongWords])
 
   // ── Click a falling word ─────────────────────────────────────────────────
   const handleWordClick = useCallback((fw: FallingWord) => {
@@ -184,23 +198,34 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
     if (!selected) return
 
     if (idx === selected.correctIdx) {
+      streakRef.current += 1
+      setStreak(streakRef.current)
+      if (streakRef.current > maxStreakRef.current) maxStreakRef.current = streakRef.current
+      const points = getStreakMultiplier(streakRef.current)
+
       setChoiceAnim({ [idx]: 'correct' })
-      setScore(s => s + 1)
+      setScore(s => s + points)
       setCorrect(s => s + 1)
       setCorrectWords(ws => [...ws, selected.word])
       setFalling(prev => prev.map(w => w.id === selected.id ? { ...w, state: 'hit' } : w))
+      if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_CORRECT, 999))
+
       setTimeout(() => {
         setFalling(prev => prev.filter(w => w.id !== selected.id))
         setSelected(null)
         setChoiceAnim({})
       }, 600)
     } else {
+      streakRef.current = 0
+      setStreak(0)
+
       setChoiceAnim({ [idx]: 'wrong' })
       setWrong(s => s + 1)
       setWrongWords(ws => [...ws, selected.word])
+      if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
+
       livesRef.current -= 1
       setLives(livesRef.current)
-      // Resume falling
       setFalling(prev => prev.map(w => w.id === selected.id ? { ...w, state: 'falling' } : w))
       setTimeout(() => {
         setSelected(null)
@@ -209,7 +234,7 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
       }, 600)
       if (livesRef.current <= 0) endGame()
     }
-  }, [selected, endGame])
+  }, [selected, endGame, isTimeAttack])
 
   const displayChoices = selected?.choices ?? []
   const showPinyin = settings.showPinyinHint || settings.matchType === 'hanzi-pinyin'
@@ -225,9 +250,11 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
       <HUD
         score={score}
         lives={lives}
+        maxLives={initLives}
         timeLeft={totalTime}
         correct={correct}
         wrong={wrong}
+        streak={streak}
         onMenu={onMenu}
       />
 
@@ -275,7 +302,6 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
         )}
       </div>
 
-      {/* Choice panel — always visible at bottom */}
       <div className="rain-choices">
         {selected
           ? displayChoices.map((choice, i) => {

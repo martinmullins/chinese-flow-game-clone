@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   showEmoji: true,
   gameDuration: 180,
   gridSize: 5,
+  gameVariant: 'standard',
 }
 
 export default function App() {
