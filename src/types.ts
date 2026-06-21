@@ -24,6 +24,7 @@ export interface GameSettings {
   gameDuration: number
   gridSize: number
   gameVariant: GameVariant
+  stageMode: boolean
 }
 
 export interface GameResult {
@@ -37,6 +38,7 @@ export interface GameResult {
   wrongWords: VocabWord[]
   maxStreak: number
   gameVariant: GameVariant
+  stagesCompleted: number
 }
 
 export type Screen = 'menu' | 'game' | 'results'

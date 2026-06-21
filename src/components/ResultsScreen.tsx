@@ -50,7 +50,7 @@ export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }:
         {/* Extra stats row */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: `repeat(${result.stagesCompleted > 0 ? 5 : 4}, 1fr)`,
           gap: 10,
         }}>
           {[
@@ -61,6 +61,7 @@ export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }:
                 : '—'
             },
             { label: 'Best Streak', val: result.maxStreak > 0 ? `🔥${result.maxStreak}` : '—' },
+            ...(result.stagesCompleted > 0 ? [{ label: 'Stages', val: `${result.stagesCompleted}` }] : []),
           ].map(({ label, val }) => (
             <div
               key={label}

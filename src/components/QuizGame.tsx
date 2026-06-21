@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, getRightContent, shuffle, getDistractors, getStreakMultiplier } from '../data'
+import { getWords, getRightContent, shuffle, getDistractors, getStreakMultiplier, getStageWords, getTotalStages } from '../data'
 import HUD from './HUD'
 
 interface Props {
@@ -11,9 +11,10 @@ interface Props {
 
 const QUESTION_TIME = 10
 
-const TIME_ATTACK_START   = 30
-const TIME_ATTACK_CORRECT = 5
-const TIME_ATTACK_WRONG   = 3
+const TIME_ATTACK_START     = 30
+const TIME_ATTACK_CORRECT   = 5
+const TIME_ATTACK_WRONG     = 3
+const TIME_ATTACK_STAGE_BON = 15
 
 interface Question {
   word: VocabWord
@@ -24,6 +25,7 @@ interface Question {
 export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const isTimeAttack  = settings.gameVariant === 'time-attack'
   const isSuddenDeath = settings.gameVariant === 'sudden-death'
+  const isStageMode   = settings.stageMode
   const initLives     = isSuddenDeath ? 1 : Infinity
   const initTime      = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
 
@@ -45,34 +47,53 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const [correctWords, setCorrectWords] = useState<VocabWord[]>([])
   const [wrongWords, setWrongWords]     = useState<VocabWord[]>([])
 
-  const poolRef       = useRef<VocabWord[]>([])
-  const allWordsRef   = useRef<VocabWord[]>([])
-  const livesRef      = useRef(initLives)
-  const streakRef     = useRef(0)
-  const maxStreakRef  = useRef(0)
-  const elapsedRef    = useRef(0)
-  const transitioning = useRef(false)
-  const gameOverRef   = useRef(false)
+  // Stage mode state
+  const [stage, setStage]               = useState(1)
+  const [stageCorrect, setStageCorrect] = useState(0)
+  const [stageDone, setStageDone]       = useState(false)
+
+  const poolRef           = useRef<VocabWord[]>([])
+  const allWordsRef       = useRef<VocabWord[]>([])
+  const livesRef          = useRef(initLives)
+  const streakRef         = useRef(0)
+  const maxStreakRef      = useRef(0)
+  const elapsedRef        = useRef(0)
+  const transitioning     = useRef(false)
+  const gameOverRef       = useRef(false)
+  const stageRef          = useRef(1)
+  const stageCorrectRef   = useRef(0)
+  const stageSizeRef      = useRef(0)
+  const totalStagesRef    = useRef(0)
+  const stagesCompletedRef = useRef(0)
 
   // ── Init ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const words = getWords(settings.hskLevels)
     allWordsRef.current = words
-    poolRef.current = shuffle([...words])
+    totalStagesRef.current = isStageMode ? getTotalStages(words) : 1
     setPool(words)
-    nextQuestion(words)
+    loadStage(words, 1)
     setIsActive(true)
   }, [])
 
+  const loadStage = useCallback((allWords: VocabWord[], stageNum: number) => {
+    const stageWords = isStageMode ? getStageWords(allWords, stageNum) : allWords
+    stageSizeRef.current = stageWords.length
+    stageCorrectRef.current = 0
+    setStageCorrect(0)
+    poolRef.current = shuffle([...stageWords])
+    nextQuestion()
+  }, [isStageMode])
+
   // ── Overall timer ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isActive || totalTime <= 0) return
+    if (!isActive || totalTime <= 0 || stageDone) return
     const t = setTimeout(() => {
       setTotalTime(s => s - 1)
       elapsedRef.current += 1
     }, 1000)
     return () => clearTimeout(t)
-  }, [isActive, totalTime])
+  }, [isActive, totalTime, stageDone])
 
   // ── End game ─────────────────────────────────────────────────────────────
   const endGame = useCallback(() => {
@@ -100,6 +121,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
         wrongWords,
         maxStreak: maxStreakRef.current,
         gameVariant: settings.gameVariant,
+        stagesCompleted: stagesCompletedRef.current,
       })
     }, 600)
     return () => clearTimeout(t)
@@ -107,24 +129,45 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
 
   // ── Per-question timer ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!isActive || chosen !== null || !question) return
+    if (!isActive || chosen !== null || !question || stageDone) return
     if (qTime <= 0) { handleTimeout(); return }
     const t = setTimeout(() => setQTime(s => s - 1), 1000)
     return () => clearTimeout(t)
-  }, [isActive, qTime, chosen, question])
+  }, [isActive, qTime, chosen, question, stageDone])
+
+  // ── Stage advance ────────────────────────────────────────────────────────
+  const advanceStage = useCallback(() => {
+    const nextStage = stageRef.current + 1
+    stagesCompletedRef.current += 1
+
+    if (nextStage > totalStagesRef.current) {
+      setStageDone(false)
+      endGame()
+      return
+    }
+
+    stageRef.current = nextStage
+    setStage(nextStage)
+    setStageDone(false)
+    if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_STAGE_BON, 999))
+    loadStage(allWordsRef.current, nextStage)
+  }, [endGame, isTimeAttack, loadStage])
 
   // ── Next question ────────────────────────────────────────────────────────
-  const nextQuestion = useCallback((words: VocabWord[]) => {
-    if (words.length === 0) return
-
+  const nextQuestion = useCallback(() => {
     if (poolRef.current.length === 0) {
+      if (isStageMode) {
+        // All words answered correctly — stage done!
+        setStageDone(true)
+        return
+      }
       poolRef.current = shuffle([...allWordsRef.current])
     }
 
     const word = poolRef.current[0]
     poolRef.current = poolRef.current.slice(1)
 
-    const distractors = getDistractors(word, words, 3)
+    const distractors = getDistractors(word, allWordsRef.current, 3)
     const allChoices  = shuffle([word, ...distractors])
     const correctIdx  = allChoices.findIndex(c => c.id === word.id)
 
@@ -134,12 +177,12 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     setFeedback(null)
     setPeekedChoices(new Set())
     transitioning.current = false
-  }, [])
+  }, [isStageMode])
 
   const advance = useCallback(() => {
     if (transitioning.current) return
     transitioning.current = true
-    setTimeout(() => nextQuestion(allWordsRef.current), 1000)
+    setTimeout(() => nextQuestion(), 1000)
   }, [nextQuestion])
 
   const handleChoice = useCallback((idx: number) => {
@@ -157,6 +200,12 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       setCorrect(s => s + 1)
       setCorrectWords(ws => [...ws, question.word])
       if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_CORRECT, 999))
+
+      if (isStageMode) {
+        stageCorrectRef.current += 1
+        setStageCorrect(stageCorrectRef.current)
+        // Don't re-add to pool — word is permanently cleared
+      }
       advance()
     } else {
       streakRef.current = 0
@@ -167,6 +216,11 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       setWrongWords(ws => [...ws, question.word])
       if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
 
+      if (isStageMode) {
+        // Re-queue the word at the end of the stage pool
+        poolRef.current = [...poolRef.current, question.word]
+      }
+
       if (isSuddenDeath) {
         livesRef.current -= 1
         setLives(livesRef.current)
@@ -174,7 +228,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       }
       advance()
     }
-  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath])
+  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath, isStageMode])
 
   const handleTimeout = useCallback(() => {
     if (chosen !== null || !question || transitioning.current || gameOverRef.current) return
@@ -183,7 +237,10 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     streakRef.current = 0
     setStreak(0)
     setWrong(s => s + 1)
-    if (question) setWrongWords(ws => [...ws, question.word])
+    if (question) {
+      setWrongWords(ws => [...ws, question.word])
+      if (isStageMode) poolRef.current = [...poolRef.current, question.word]
+    }
     if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
 
     if (isSuddenDeath) {
@@ -192,11 +249,11 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       if (livesRef.current <= 0) { endGame(); return }
     }
     advance()
-  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath])
+  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath, isStageMode])
 
   if (!question) return null
 
-  const timeRatio = qTime / QUESTION_TIME
+  const timeRatio  = qTime / QUESTION_TIME
   const showPinyin = settings.showPinyinHint || settings.matchType === 'hanzi-pinyin'
   const hudMaxLives = isSuddenDeath ? 1 : 0
 
@@ -210,30 +267,24 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
         correct={correct}
         wrong={wrong}
         streak={streak}
+        stageInfo={isStageMode ? { stage, total: totalStagesRef.current, done: stageCorrect, size: stageSizeRef.current } : undefined}
         onMenu={onMenu}
       />
 
       <div className="quiz-body">
         <div className="quiz-word-card">
           {settings.matchType === 'pinyin-english' ? (
-            <span className="quiz-word-hanzi" style={{ fontSize: '2rem' }}>
-              {question.word.pinyin}
-            </span>
+            <span className="quiz-word-hanzi" style={{ fontSize: '2rem' }}>{question.word.pinyin}</span>
           ) : (
             <>
               <span className="quiz-word-hanzi">{question.word.hanzi}</span>
-              {showPinyin && (
-                <span className="quiz-word-pinyin">{question.word.pinyin}</span>
-              )}
+              {showPinyin && <span className="quiz-word-pinyin">{question.word.pinyin}</span>}
             </>
           )}
         </div>
 
         <div className="quiz-time-bar">
-          <div
-            className={`quiz-time-fill ${timeRatio < 0.3 ? 'low' : ''}`}
-            style={{ width: `${timeRatio * 100}%` }}
-          />
+          <div className={`quiz-time-fill ${timeRatio < 0.3 ? 'low' : ''}`} style={{ width: `${timeRatio * 100}%` }} />
         </div>
 
         <div className="quiz-choices">
@@ -256,31 +307,13 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
                 {useEmoji && !isPeeked ? (
                   <>
                     <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>{choice.emoji}</span>
-                    <span
-                      className="peek-btn"
-                      role="button"
-                      onClick={e => {
-                        e.stopPropagation()
-                        setPeekedChoices(prev => {
-                          const next = new Set(prev)
-                          if (next.has(i)) next.delete(i); else next.add(i)
-                          return next
-                        })
-                      }}
-                    >?</span>
+                    <span className="peek-btn" role="button" onClick={e => { e.stopPropagation(); setPeekedChoices(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n }) }}>?</span>
                   </>
                 ) : (
                   <>
                     {getRightContent(choice, settings.matchType)}
                     {useEmoji && isPeeked && (
-                      <span
-                        className="peek-btn peek-btn-close"
-                        role="button"
-                        onClick={e => {
-                          e.stopPropagation()
-                          setPeekedChoices(prev => { const n = new Set(prev); n.delete(i); return n })
-                        }}
-                      >{choice.emoji}</span>
+                      <span className="peek-btn peek-btn-close" role="button" onClick={e => { e.stopPropagation(); setPeekedChoices(prev => { const n = new Set(prev); n.delete(i); return n }) }}>{choice.emoji}</span>
                     )}
                   </>
                 )}
@@ -296,8 +329,26 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
 
         <div className="quiz-progress">
           {correct + wrong} answered · {Math.round((correct / Math.max(1, correct + wrong)) * 100)}% correct
+          {isStageMode && ` · ${poolRef.current.length + (chosen === null ? 0 : 0)} left in stage`}
         </div>
       </div>
+
+      {/* Stage Complete overlay */}
+      {stageDone && !gameOver && (
+        <div className="stage-complete-overlay">
+          <div className="stage-complete-card">
+            <div className="stage-complete-emoji">🎉</div>
+            <h2>Stage {stage} Complete!</h2>
+            <p className="stage-complete-sub">
+              {stageSizeRef.current} words mastered
+              {isTimeAttack && <> · <span style={{ color: 'var(--green)' }}>+{TIME_ATTACK_STAGE_BON}s bonus</span></>}
+            </p>
+            <button className="stage-continue-btn" onClick={advanceStage}>
+              {stageRef.current < totalStagesRef.current ? `Stage ${stage + 1} →` : 'See Results'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

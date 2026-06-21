@@ -41,6 +41,17 @@ export function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+export const STAGE_SIZE = 30
+
+export function getStageWords(allWords: VocabWord[], stage: number): VocabWord[] {
+  const start = (stage - 1) * STAGE_SIZE
+  return allWords.slice(start, start + STAGE_SIZE)
+}
+
+export function getTotalStages(allWords: VocabWord[]): number {
+  return Math.max(1, Math.ceil(allWords.length / STAGE_SIZE))
+}
+
 export function getStreakMultiplier(streak: number): number {
   if (streak < 3)  return 1
   if (streak < 6)  return 2
