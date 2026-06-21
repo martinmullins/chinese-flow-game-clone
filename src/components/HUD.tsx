@@ -8,10 +8,11 @@ interface Props {
   correct: number
   wrong: number
   streak?: number
+  stageInfo?: { stage: number; total: number; done: number; size: number }
   onMenu: () => void
 }
 
-export default function HUD({ score, lives, maxLives = 3, timeLeft, correct, wrong, streak = 0, onMenu }: Props) {
+export default function HUD({ score, lives, maxLives = 3, timeLeft, correct, wrong, streak = 0, stageInfo, onMenu }: Props) {
   const isUrgent = timeLeft <= 30
   const mult = getStreakMultiplier(streak)
 
@@ -29,6 +30,13 @@ export default function HUD({ score, lives, maxLives = 3, timeLeft, correct, wro
         <span className="score-label">Score</span>
         <span className="score-val">{score}</span>
       </div>
+
+      {stageInfo && (
+        <div className="hud-stage-info">
+          <span className="stage-tag">S{stageInfo.stage}/{stageInfo.total}</span>
+          <span className="stage-progress">{stageInfo.done}/{stageInfo.size}</span>
+        </div>
+      )}
 
       {streak >= 3 && (
         <div className="hud-streak">

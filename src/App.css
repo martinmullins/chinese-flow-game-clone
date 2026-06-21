@@ -345,6 +345,20 @@ button:active { transform: scale(0.97); }
 .hud-score .score-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
 .hud-score .score-val   { font-size: 1.2rem; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
 
+.hud-stage-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+.stage-tag      { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.stage-progress { font-size: 0.85rem; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
+
 .hud-spacer { flex: 1; }
 
 .hud-streak {
@@ -512,6 +526,54 @@ button:active { transform: scale(0.97); }
   font-size: 0.55rem;
   color: var(--text-dim);
   opacity: 0.6;
+}
+
+/* ── Stage Complete Overlay ───────────────────────────────────────────────── */
+.stage-complete-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 16, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 90;
+  animation: fade-in 0.25s ease;
+}
+.stage-complete-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 36px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  max-width: 340px;
+  width: 90%;
+}
+.stage-complete-emoji { font-size: 3rem; line-height: 1; }
+.stage-complete-card h2 { font-size: 1.6rem; color: var(--gold); }
+.stage-complete-sub { color: var(--text-dim); font-size: 0.88rem; }
+.stage-continue-btn {
+  margin-top: 8px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.stage-continue-btn:hover { opacity: 0.88; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 /* ── Game Over Overlay ────────────────────────────────────────────────────── */

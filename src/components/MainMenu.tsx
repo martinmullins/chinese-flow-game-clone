@@ -190,6 +190,20 @@ export default function MainMenu({ settings, onStart }: Props) {
               Show pinyin hint on Chinese cards
             </label>
 
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={s.stageMode}
+                onChange={e => setS(prev => ({ ...prev, stageMode: e.target.checked }))}
+              />
+              <span>
+                Stage Mode — groups of 30
+                <small style={{ display: 'block', color: 'var(--text-dim)', fontWeight: 400 }}>
+                  Work through 30 words at a time. Wrong answers re-queue until you get them right.
+                </small>
+              </span>
+            </label>
+
             {s.gameVariant !== 'time-attack' && (
               <div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: 8 }}>

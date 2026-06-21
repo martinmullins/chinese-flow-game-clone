@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   gameDuration: 180,
   gridSize: 5,
   gameVariant: 'standard',
+  stageMode: false,
 }
 
 export default function App() {
