@@ -2,3 +2,6 @@ node_modules
 dist
 .DS_Store
 *.local
+# allow root-level built output (served by GitHub Pages)
+!assets/
+!.nojekyll
