@@ -872,6 +872,48 @@ button:active { transform: scale(0.97); }
   text-align: center;
 }
 
+/* ── Emoji card mode ──────────────────────────────────────────────────────── */
+.card-emoji-mode {
+  min-height: 80px;
+}
+
+.card-emoji-display {
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  line-height: 1;
+  text-align: center;
+  /* prevent emoji from being treated as a click target for selection */
+  pointer-events: none;
+}
+
+.peek-btn {
+  position: absolute;
+  bottom: 5px;
+  right: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  z-index: 2;
+  pointer-events: all;
+  user-select: none;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+
+.peek-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.peek-btn-close {
+  font-size: 0.9rem;
+  padding: 1px 5px;
+}
+
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg2); }

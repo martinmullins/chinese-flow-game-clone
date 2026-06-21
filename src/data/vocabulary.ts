@@ -1,4 +1,5 @@
 import { VocabWord } from '../types'
+import { emojiMap } from './emojiMap'
 
 // [hanzi, pinyin, english, hskLevel]
 type Raw = [string, string, string, 1 | 2 | 3 | 4 | 5 | 6]
@@ -473,4 +474,5 @@ export const vocabulary: VocabWord[] = raw.map(([hanzi, pinyin, english, hskLeve
   pinyin,
   english,
   hskLevel,
+  emoji: emojiMap[hanzi],
 }))
