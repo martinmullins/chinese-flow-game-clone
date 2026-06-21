@@ -26,7 +26,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const isTimeAttack  = settings.gameVariant === 'time-attack'
   const isSuddenDeath = settings.gameVariant === 'sudden-death'
   const isStageMode   = settings.stageMode
-  const initLives     = isSuddenDeath ? 1 : Infinity
+  const initLives     = isSuddenDeath ? 1 : 3
   const initTime      = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
 
   const [, setPool]               = useState<VocabWord[]>([])
@@ -217,15 +217,12 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
 
       if (isStageMode) {
-        // Re-queue the word at the end of the stage pool
         poolRef.current = [...poolRef.current, question.word]
       }
 
-      if (isSuddenDeath) {
-        livesRef.current -= 1
-        setLives(livesRef.current)
-        if (livesRef.current <= 0) { endGame(); return }
-      }
+      livesRef.current -= 1
+      setLives(livesRef.current)
+      if (livesRef.current <= 0) { endGame(); return }
       advance()
     }
   }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath, isStageMode])
@@ -243,26 +240,23 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     }
     if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
 
-    if (isSuddenDeath) {
-      livesRef.current -= 1
-      setLives(livesRef.current)
-      if (livesRef.current <= 0) { endGame(); return }
-    }
+    livesRef.current -= 1
+    setLives(livesRef.current)
+    if (livesRef.current <= 0) { endGame(); return }
     advance()
-  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath, isStageMode])
+  }, [chosen, question, advance, endGame, isTimeAttack, isStageMode])
 
   if (!question) return null
 
   const timeRatio  = qTime / QUESTION_TIME
   const showPinyin = settings.showPinyinHint || settings.matchType === 'hanzi-pinyin'
-  const hudMaxLives = isSuddenDeath ? 1 : 0
 
   return (
     <div className="quiz-screen">
       <HUD
         score={score}
-        lives={lives === Infinity ? 0 : lives}
-        maxLives={hudMaxLives}
+        lives={lives}
+        maxLives={initLives}
         timeLeft={totalTime}
         correct={correct}
         wrong={wrong}
