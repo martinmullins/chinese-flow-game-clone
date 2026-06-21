@@ -129,6 +129,20 @@ export default function MainMenu({ settings, onStart }: Props) {
             <label className="toggle-label">
               <input
                 type="checkbox"
+                checked={s.showEmoji}
+                onChange={e => setS(prev => ({ ...prev, showEmoji: e.target.checked }))}
+              />
+              <span>
+                Use emoji instead of English
+                <small style={{ display: 'block', color: 'var(--text-dim)', fontWeight: 400 }}>
+                  Click the <strong>?</strong> on a card to peek at the translation
+                </small>
+              </span>
+            </label>
+
+            <label className="toggle-label">
+              <input
+                type="checkbox"
                 checked={s.showPinyinHint}
                 onChange={e => setS(prev => ({ ...prev, showPinyinHint: e.target.checked }))}
               />

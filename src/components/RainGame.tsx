@@ -27,6 +27,7 @@ let instanceCounter = 0
 
 export default function RainGame({ settings, onGameOver, onMenu }: Props) {
   const [, setWords]              = useState<VocabWord[]>([])
+  const [peekedChoices, setPeekedChoices] = useState<Set<number>>(new Set())
   const [falling, setFalling]     = useState<FallingWord[]>([])
   const [selected, setSelected]   = useState<FallingWord | null>(null)
   const [choiceAnim, setChoiceAnim] = useState<Record<number, 'correct' | 'wrong'>>({})
@@ -204,6 +205,7 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
       setTimeout(() => {
         setSelected(null)
         setChoiceAnim({})
+        setPeekedChoices(new Set())
       }, 600)
       if (livesRef.current <= 0) endGame()
     }
@@ -278,14 +280,47 @@ export default function RainGame({ settings, onGameOver, onMenu }: Props) {
         {selected
           ? displayChoices.map((choice, i) => {
               const anim = choiceAnim[i]
+              const useEmoji = settings.showEmoji && !!choice.emoji && settings.matchType !== 'hanzi-pinyin'
+              const isPeeked = peekedChoices.has(i)
               return (
                 <button
                   key={i}
                   className={['rain-choice', anim ?? ''].join(' ')}
                   onClick={() => handleChoice(i)}
                   disabled={Object.keys(choiceAnim).length > 0}
+                  style={{ position: 'relative', flexDirection: 'column', gap: 2 }}
                 >
-                  {getRightLabel(choice)}
+                  {useEmoji && !isPeeked ? (
+                    <>
+                      <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{choice.emoji}</span>
+                      <span
+                        className="peek-btn"
+                        role="button"
+                        onClick={e => {
+                          e.stopPropagation()
+                          setPeekedChoices(prev => {
+                            const next = new Set(prev)
+                            if (next.has(i)) next.delete(i); else next.add(i)
+                            return next
+                          })
+                        }}
+                      >?</span>
+                    </>
+                  ) : (
+                    <>
+                      {getRightLabel(choice)}
+                      {useEmoji && isPeeked && (
+                        <span
+                          className="peek-btn peek-btn-close"
+                          role="button"
+                          onClick={e => {
+                            e.stopPropagation()
+                            setPeekedChoices(prev => { const n = new Set(prev); n.delete(i); return n })
+                          }}
+                        >{choice.emoji}</span>
+                      )}
+                    </>
+                  )}
                 </button>
               )
             })

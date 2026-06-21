@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   gameMode: 'flow',
   matchType: 'hanzi-english',
   showPinyinHint: false,
+  showEmoji: true,
   gameDuration: 180,
   gridSize: 5,
 }

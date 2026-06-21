@@ -22,6 +22,7 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
   const [flashMap, setFlashMap]         = useState<Record<string, FlashState>>({})
   const [enterSet, setEnterSet]         = useState<Set<string>>(new Set())
+  const [peekedIds, setPeekedIds]       = useState<Set<string>>(new Set())
 
   // Game stats
   const [score, setScore]           = useState(0)
@@ -81,6 +82,9 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     const next = queueRef.current[0]
     queueRef.current = queueRef.current.slice(1)
 
+    // Clear peek for the matched word
+    setPeekedIds(prev => { const s = new Set(prev); s.delete(matchedId); return s })
+
     if (next) {
       setEnterSet(prev => new Set(prev).add(next.id))
       setTimeout(() => {
@@ -96,7 +100,6 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
         return [...filtered.slice(0, pos), next.id, ...filtered.slice(pos)]
       })
     } else {
-      // Queue empty — keep playing with remaining cards, cycle the pool
       setLeftIds(prev => prev.filter(id => id !== matchedId))
       setRightIds(prev => prev.filter(id => id !== matchedId))
     }
@@ -149,6 +152,17 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     }
   }, [isActive, selectedLeft, flashMap, replaceWord, endGame])
 
+  // ── Peek handler ────────────────────────────────────────────────────────
+  const handlePeek = useCallback((wordId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPeekedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(wordId)) next.delete(wordId)
+      else next.add(wordId)
+      return next
+    })
+  }, [])
+
   // ── Fire game over when done ─────────────────────────────────────────────
   useEffect(() => {
     if (!gameOver) return
@@ -177,6 +191,7 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
   }
   const getRightLabel = () => {
     if (settings.matchType === 'hanzi-pinyin') return 'Pinyin'
+    if (settings.showEmoji) return 'Emoji  (click ? to peek)'
     return 'English'
   }
 
@@ -230,24 +245,49 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
         <div className="flow-col">
           <div className="flow-col-label">{getRightLabel()}</div>
           {rightCards.map(word => {
-            const flash = flashMap[word.id] ?? null
+            const flash     = flashMap[word.id] ?? null
             const isEntering = enterSet.has(word.id)
+            const useEmoji  = settings.showEmoji && !!word.emoji && settings.matchType !== 'hanzi-pinyin'
+            const isPeeked  = peekedIds.has(word.id)
             return (
               <button
                 key={word.id}
                 className={[
                   'vocab-card',
+                  useEmoji ? 'card-emoji-mode' : '',
                   flash === 'match' ? 'card-match' : '',
                   flash === 'wrong' ? 'card-wrong' : '',
                   isEntering ? 'card-enter' : '',
                 ].join(' ')}
                 onClick={() => handleRightClick(word.id)}
                 disabled={!!flash || !selectedLeft}
-                style={!selectedLeft ? { opacity: 0.7 } : undefined}
+                style={!selectedLeft ? { opacity: 0.72 } : undefined}
               >
-                <span className="card-english">
-                  {getRightContent(word, settings.matchType)}
-                </span>
+                {useEmoji && !isPeeked ? (
+                  <>
+                    <span className="card-emoji-display">{word.emoji}</span>
+                    <span
+                      className="peek-btn"
+                      role="button"
+                      onClick={e => handlePeek(word.id, e)}
+                      title="Peek at translation"
+                    >?</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="card-english">
+                      {getRightContent(word, settings.matchType)}
+                    </span>
+                    {useEmoji && isPeeked && (
+                      <span
+                        className="peek-btn peek-btn-close"
+                        role="button"
+                        onClick={e => handlePeek(word.id, e)}
+                        title="Hide translation"
+                      >{word.emoji}</span>
+                    )}
+                  </>
+                )}
               </button>
             )
           })}

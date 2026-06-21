@@ -19,6 +19,7 @@ interface Question {
 
 export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const [, setPool]               = useState<VocabWord[]>([])
+  const [peekedChoices, setPeekedChoices] = useState<Set<number>>(new Set())
   const [question, setQuestion]   = useState<Question | null>(null)
   const [qTime, setQTime]         = useState(QUESTION_TIME)
   const [chosen, setChosen]       = useState<number | null>(null)
@@ -98,6 +99,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     setQTime(QUESTION_TIME)
     setChosen(null)
     setFeedback(null)
+    setPeekedChoices(new Set())
     transitioning.current = false
   }, [])
 
@@ -179,14 +181,47 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
               if (i === question.correctIdx) cls += ' correct'
               else if (i === chosen) cls += ' wrong'
             }
+            const useEmoji = settings.showEmoji && !!choice.emoji && settings.matchType !== 'hanzi-pinyin'
+            const isPeeked = peekedChoices.has(i)
             return (
               <button
                 key={choice.id}
                 className={cls}
                 onClick={() => handleChoice(i)}
                 disabled={chosen !== null}
+                style={{ position: 'relative', flexDirection: 'column', gap: 4 }}
               >
-                {getRightContent(choice, settings.matchType)}
+                {useEmoji && !isPeeked ? (
+                  <>
+                    <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>{choice.emoji}</span>
+                    <span
+                      className="peek-btn"
+                      role="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        setPeekedChoices(prev => {
+                          const next = new Set(prev)
+                          if (next.has(i)) next.delete(i); else next.add(i)
+                          return next
+                        })
+                      }}
+                    >?</span>
+                  </>
+                ) : (
+                  <>
+                    {getRightContent(choice, settings.matchType)}
+                    {useEmoji && isPeeked && (
+                      <span
+                        className="peek-btn peek-btn-close"
+                        role="button"
+                        onClick={e => {
+                          e.stopPropagation()
+                          setPeekedChoices(prev => { const n = new Set(prev); n.delete(i); return n })
+                        }}
+                      >{choice.emoji}</span>
+                    )}
+                  </>
+                )}
               </button>
             )
           })}
