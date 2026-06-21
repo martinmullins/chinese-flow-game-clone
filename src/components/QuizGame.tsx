@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, getRightContent, shuffle, getDistractors } from '../data'
+import { getWords, getRightContent, shuffle, getDistractors, getStreakMultiplier } from '../data'
 import HUD from './HUD'
 
 interface Props {
@@ -11,6 +11,10 @@ interface Props {
 
 const QUESTION_TIME = 10
 
+const TIME_ATTACK_START   = 30
+const TIME_ATTACK_CORRECT = 5
+const TIME_ATTACK_WRONG   = 3
+
 interface Question {
   word: VocabWord
   choices: VocabWord[]
@@ -18,6 +22,11 @@ interface Question {
 }
 
 export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
+  const isTimeAttack  = settings.gameVariant === 'time-attack'
+  const isSuddenDeath = settings.gameVariant === 'sudden-death'
+  const initLives     = isSuddenDeath ? 1 : Infinity
+  const initTime      = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
+
   const [, setPool]               = useState<VocabWord[]>([])
   const [peekedChoices, setPeekedChoices] = useState<Set<number>>(new Set())
   const [question, setQuestion]   = useState<Question | null>(null)
@@ -26,16 +35,24 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const [feedback, setFeedback]   = useState<'correct' | 'wrong' | null>(null)
 
   const [score, setScore]           = useState(0)
+  const [lives, setLives]           = useState(initLives)
+  const [streak, setStreak]         = useState(0)
   const [correct, setCorrect]       = useState(0)
   const [wrong, setWrong]           = useState(0)
-  const [totalTime, setTotalTime]   = useState(settings.gameDuration)
+  const [totalTime, setTotalTime]   = useState(initTime)
   const [isActive, setIsActive]     = useState(false)
+  const [gameOver, setGameOver]     = useState(false)
   const [correctWords, setCorrectWords] = useState<VocabWord[]>([])
   const [wrongWords, setWrongWords]     = useState<VocabWord[]>([])
 
-  const poolRef      = useRef<VocabWord[]>([])
-  const allWordsRef  = useRef<VocabWord[]>([])
+  const poolRef       = useRef<VocabWord[]>([])
+  const allWordsRef   = useRef<VocabWord[]>([])
+  const livesRef      = useRef(initLives)
+  const streakRef     = useRef(0)
+  const maxStreakRef  = useRef(0)
+  const elapsedRef    = useRef(0)
   const transitioning = useRef(false)
+  const gameOverRef   = useRef(false)
 
   // ── Init ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -50,27 +67,43 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   // ── Overall timer ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isActive || totalTime <= 0) return
-    const t = setTimeout(() => setTotalTime(s => s - 1), 1000)
+    const t = setTimeout(() => {
+      setTotalTime(s => s - 1)
+      elapsedRef.current += 1
+    }, 1000)
     return () => clearTimeout(t)
   }, [isActive, totalTime])
 
+  // ── End game ─────────────────────────────────────────────────────────────
+  const endGame = useCallback(() => {
+    if (gameOverRef.current) return
+    gameOverRef.current = true
+    setIsActive(false)
+    setGameOver(true)
+  }, [])
+
   useEffect(() => {
-    if (totalTime <= 0 && isActive) {
-      setIsActive(false)
-      setTimeout(() => {
-        onGameOver({
-          score,
-          correct,
-          wrong,
-          timeUsed: settings.gameDuration,
-          gameMode: 'quiz',
-          hskLevels: settings.hskLevels,
-          correctWords,
-          wrongWords,
-        })
-      }, 600)
-    }
+    if (totalTime <= 0 && isActive) endGame()
   }, [totalTime])
+
+  useEffect(() => {
+    if (!gameOver) return
+    const t = setTimeout(() => {
+      onGameOver({
+        score,
+        correct,
+        wrong,
+        timeUsed: elapsedRef.current,
+        gameMode: 'quiz',
+        hskLevels: settings.hskLevels,
+        correctWords,
+        wrongWords,
+        maxStreak: maxStreakRef.current,
+        gameVariant: settings.gameVariant,
+      })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [gameOver])
 
   // ── Per-question timer ───────────────────────────────────────────────────
   useEffect(() => {
@@ -110,44 +143,73 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   }, [nextQuestion])
 
   const handleChoice = useCallback((idx: number) => {
-    if (chosen !== null || !question || transitioning.current) return
+    if (chosen !== null || !question || transitioning.current || gameOverRef.current) return
     setChosen(idx)
 
     if (idx === question.correctIdx) {
+      streakRef.current += 1
+      setStreak(streakRef.current)
+      if (streakRef.current > maxStreakRef.current) maxStreakRef.current = streakRef.current
+      const points = getStreakMultiplier(streakRef.current)
+
       setFeedback('correct')
-      setScore(s => s + 1)
+      setScore(s => s + points)
       setCorrect(s => s + 1)
       setCorrectWords(ws => [...ws, question.word])
+      if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_CORRECT, 999))
+      advance()
     } else {
+      streakRef.current = 0
+      setStreak(0)
+
       setFeedback('wrong')
       setWrong(s => s + 1)
       setWrongWords(ws => [...ws, question.word])
+      if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
+
+      if (isSuddenDeath) {
+        livesRef.current -= 1
+        setLives(livesRef.current)
+        if (livesRef.current <= 0) { endGame(); return }
+      }
+      advance()
     }
-    advance()
-  }, [chosen, question, advance])
+  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath])
 
   const handleTimeout = useCallback(() => {
-    if (chosen !== null || !question || transitioning.current) return
+    if (chosen !== null || !question || transitioning.current || gameOverRef.current) return
     setChosen(-1)
     setFeedback('wrong')
+    streakRef.current = 0
+    setStreak(0)
     setWrong(s => s + 1)
     if (question) setWrongWords(ws => [...ws, question.word])
+    if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
+
+    if (isSuddenDeath) {
+      livesRef.current -= 1
+      setLives(livesRef.current)
+      if (livesRef.current <= 0) { endGame(); return }
+    }
     advance()
-  }, [chosen, question, advance])
+  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath])
 
   if (!question) return null
 
   const timeRatio = qTime / QUESTION_TIME
   const showPinyin = settings.showPinyinHint || settings.matchType === 'hanzi-pinyin'
+  const hudMaxLives = isSuddenDeath ? 1 : 0
 
   return (
     <div className="quiz-screen">
       <HUD
         score={score}
-        lives={3}
+        lives={lives === Infinity ? 0 : lives}
+        maxLives={hudMaxLives}
         timeLeft={totalTime}
         correct={correct}
         wrong={wrong}
+        streak={streak}
         onMenu={onMenu}
       />
 

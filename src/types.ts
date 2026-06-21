@@ -13,6 +13,8 @@ export type GameMode = 'flow' | 'quiz' | 'rain'
 
 export type MatchType = 'hanzi-english' | 'hanzi-pinyin' | 'pinyin-english'
 
+export type GameVariant = 'standard' | 'time-attack' | 'sudden-death'
+
 export interface GameSettings {
   hskLevels: HskLevel[]
   gameMode: GameMode
@@ -21,6 +23,7 @@ export interface GameSettings {
   showEmoji: boolean
   gameDuration: number
   gridSize: number
+  gameVariant: GameVariant
 }
 
 export interface GameResult {
@@ -32,6 +35,8 @@ export interface GameResult {
   hskLevels: HskLevel[]
   correctWords: VocabWord[]
   wrongWords: VocabWord[]
+  maxStreak: number
+  gameVariant: GameVariant
 }
 
 export type Screen = 'menu' | 'game' | 'results'

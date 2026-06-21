@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, getLeftContent, getRightContent, shuffle } from '../data'
+import { getWords, getLeftContent, getRightContent, shuffle, getStreakMultiplier } from '../data'
 import HUD from './HUD'
 
 interface Props {
@@ -11,34 +11,42 @@ interface Props {
 
 type FlashState = 'match' | 'wrong' | null
 
+const TIME_ATTACK_START   = 30
+const TIME_ATTACK_CORRECT = 5
+const TIME_ATTACK_WRONG   = 3
+
 export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
   const GRID = settings.gridSize
+  const isTimeAttack   = settings.gameVariant === 'time-attack'
+  const isSuddenDeath  = settings.gameVariant === 'sudden-death'
+  const initLives      = isSuddenDeath ? 1 : 3
+  const initTime       = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
 
-  // Active word IDs in each column
   const [leftIds, setLeftIds]   = useState<string[]>([])
   const [rightIds, setRightIds] = useState<string[]>([])
 
-  // UI state
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null)
   const [flashMap, setFlashMap]         = useState<Record<string, FlashState>>({})
   const [enterSet, setEnterSet]         = useState<Set<string>>(new Set())
   const [peekedIds, setPeekedIds]       = useState<Set<string>>(new Set())
 
-  // Game stats
   const [score, setScore]           = useState(0)
-  const [lives, setLives]           = useState(3)
+  const [lives, setLives]           = useState(initLives)
+  const [streak, setStreak]         = useState(0)
   const [correct, setCorrect]       = useState(0)
   const [wrong, setWrong]           = useState(0)
-  const [timeLeft, setTimeLeft]     = useState(settings.gameDuration)
+  const [timeLeft, setTimeLeft]     = useState(initTime)
   const [isActive, setIsActive]     = useState(false)
   const [gameOver, setGameOver]     = useState(false)
   const [correctWords, setCorrectWords] = useState<VocabWord[]>([])
   const [wrongWords, setWrongWords]     = useState<VocabWord[]>([])
 
-  // Refs to avoid stale closures
   const queueRef    = useRef<VocabWord[]>([])
   const wordMapRef  = useRef<Map<string, VocabWord>>(new Map())
-  const livesRef    = useRef(3)
+  const livesRef    = useRef(initLives)
+  const streakRef   = useRef(0)
+  const maxStreakRef = useRef(0)
+  const elapsedRef  = useRef(0)
   const gameOverRef = useRef(false)
 
   const wordMap = useMemo(() => wordMapRef.current, [])
@@ -51,21 +59,24 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     const shuffled = shuffle(words)
     wordMapRef.current = new Map(words.map(w => [w.id, w]))
 
-    const initial  = shuffled.slice(0, GRID)
+    const initial = shuffled.slice(0, GRID)
     queueRef.current = shuffled.slice(GRID)
 
     const initialIds = initial.map(w => w.id)
     setLeftIds(initialIds)
     setRightIds(shuffle([...initialIds]))
     setIsActive(true)
-  }, []) // intentionally no deps — only run once
+  }, [])
 
   // ── Timer ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isActive || gameOver) return
     if (timeLeft <= 0) { endGame(); return }
 
-    const t = setTimeout(() => setTimeLeft(s => s - 1), 1000)
+    const t = setTimeout(() => {
+      setTimeLeft(s => s - 1)
+      elapsedRef.current += 1
+    }, 1000)
     return () => clearTimeout(t)
   }, [isActive, timeLeft, gameOver])
 
@@ -77,20 +88,36 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     setIsActive(false)
   }, [])
 
+  useEffect(() => {
+    if (!gameOver) return
+    const timer = setTimeout(() => {
+      onGameOver({
+        score,
+        correct,
+        wrong,
+        timeUsed: elapsedRef.current,
+        gameMode: 'flow',
+        hskLevels: settings.hskLevels,
+        correctWords,
+        wrongWords,
+        maxStreak: maxStreakRef.current,
+        gameVariant: settings.gameVariant,
+      })
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [gameOver])
+
   // ── Replace matched word ─────────────────────────────────────────────────
   const replaceWord = useCallback((matchedId: string) => {
     const next = queueRef.current[0]
     queueRef.current = queueRef.current.slice(1)
 
-    // Clear peek for the matched word
     setPeekedIds(prev => { const s = new Set(prev); s.delete(matchedId); return s })
 
     if (next) {
       setEnterSet(prev => new Set(prev).add(next.id))
       setTimeout(() => {
-        setEnterSet(prev => {
-          const s = new Set(prev); s.delete(next.id); return s
-        })
+        setEnterSet(prev => { const s = new Set(prev); s.delete(next.id); return s })
       }, 350)
 
       setLeftIds(prev => [...prev.filter(id => id !== matchedId), next.id])
@@ -122,10 +149,16 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     if (wordId === left) {
       // ── MATCH ──
       const word = wordMapRef.current.get(wordId)!
+      streakRef.current += 1
+      setStreak(streakRef.current)
+      if (streakRef.current > maxStreakRef.current) maxStreakRef.current = streakRef.current
+      const points = getStreakMultiplier(streakRef.current)
+
       setFlashMap(prev => ({ ...prev, [wordId]: 'match' }))
-      setScore(s => s + 1)
+      setScore(s => s + points)
       setCorrect(s => s + 1)
       setCorrectWords(ws => [...ws, word])
+      if (isTimeAttack) setTimeLeft(t => Math.min(t + TIME_ATTACK_CORRECT, 999))
 
       setTimeout(() => {
         setFlashMap(prev => { const n = { ...prev }; delete n[wordId]; return n })
@@ -134,9 +167,13 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
     } else {
       // ── WRONG ──
       const word = wordMapRef.current.get(left)!
+      streakRef.current = 0
+      setStreak(0)
+
       setFlashMap(prev => ({ ...prev, [left]: 'wrong', [wordId]: 'wrong' }))
       setWrong(s => s + 1)
       setWrongWords(ws => [...ws, word])
+      if (isTimeAttack) setTimeLeft(t => Math.max(t - TIME_ATTACK_WRONG, 0))
 
       setTimeout(() => {
         setFlashMap(prev => {
@@ -150,7 +187,7 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
         if (livesRef.current <= 0) endGame()
       }, 620)
     }
-  }, [isActive, selectedLeft, flashMap, replaceWord, endGame])
+  }, [isActive, selectedLeft, flashMap, replaceWord, endGame, isTimeAttack])
 
   // ── Peek handler ────────────────────────────────────────────────────────
   const handlePeek = useCallback((wordId: string, e: React.MouseEvent) => {
@@ -162,24 +199,6 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
       return next
     })
   }, [])
-
-  // ── Fire game over when done ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!gameOver) return
-    const timer = setTimeout(() => {
-      onGameOver({
-        score,
-        correct,
-        wrong,
-        timeUsed: settings.gameDuration - timeLeft,
-        gameMode: 'flow',
-        hskLevels: settings.hskLevels,
-        correctWords,
-        wrongWords,
-      })
-    }, 1200)
-    return () => clearTimeout(timer)
-  }, [gameOver])
 
   // ── Render ───────────────────────────────────────────────────────────────
   const leftCards  = leftIds.map(id => wordMap.get(id)).filter(Boolean) as VocabWord[]
@@ -200,9 +219,11 @@ export default function FlowGame({ settings, onGameOver, onMenu }: Props) {
       <HUD
         score={score}
         lives={lives}
+        maxLives={initLives}
         timeLeft={timeLeft}
         correct={correct}
         wrong={wrong}
+        streak={streak}
         onMenu={onMenu}
       />
 

@@ -50,7 +50,7 @@ export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }:
         {/* Extra stats row */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 10,
         }}>
           {[
@@ -60,6 +60,7 @@ export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }:
                 ? `${Math.round(result.correct / (result.timeUsed / 60))}`
                 : '—'
             },
+            { label: 'Best Streak', val: result.maxStreak > 0 ? `🔥${result.maxStreak}` : '—' },
           ].map(({ label, val }) => (
             <div
               key={label}
@@ -163,7 +164,7 @@ export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }:
           <span>·</span>
           <span>Match: <strong style={{ color: 'var(--text-mid)' }}>{settings.matchType}</strong></span>
           <span>·</span>
-          <span>Duration: <strong style={{ color: 'var(--text-mid)' }}>{settings.gameDuration / 60}m</strong></span>
+          <span>Variant: <strong style={{ color: 'var(--text-mid)' }}>{settings.gameVariant}</strong></span>
         </div>
 
         <div className="results-actions">

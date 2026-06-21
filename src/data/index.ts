@@ -40,3 +40,11 @@ export function formatTime(seconds: number): string {
   const s = seconds % 60
   return `${m}:${String(s).padStart(2, '0')}`
 }
+
+export function getStreakMultiplier(streak: number): number {
+  if (streak < 3)  return 1
+  if (streak < 6)  return 2
+  if (streak < 10) return 3
+  if (streak < 15) return 4
+  return 5
+}
