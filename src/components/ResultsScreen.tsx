@@ -12,9 +12,12 @@ function formatTime(s: number) {
   return `${m}:${String(s % 60).padStart(2, '0')}`
 }
 
-export default function ResultsScreen({ result, onPlayAgain, onMenu }: Props) {
+export default function ResultsScreen({ result, settings, onPlayAgain, onMenu }: Props) {
   const won = result.sdCompleted
   const reached = result.sdReached
+  const groupSuffix = settings.groupIndex > 0 && settings.hskLevels.length === 1
+    ? ` · Group ${settings.groupIndex}`
+    : ''
 
   return (
     <div className="results-wrap">
@@ -28,7 +31,7 @@ export default function ResultsScreen({ result, onPlayAgain, onMenu }: Props) {
             {won ? '完美！ Perfect' : reached ? '游戏结束 Game Over' : 'Session Complete'}
           </h1>
           <p className="results-sub">
-            HSK {result.hskLevels.join(' + ')} · {result.matchType}
+            HSK {result.hskLevels.join(' + ')}{groupSuffix} · {result.matchType}
           </p>
         </div>
 

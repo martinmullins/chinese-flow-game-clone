@@ -52,6 +52,21 @@ export function getTotalStages(allWords: VocabWord[]): number {
   return Math.max(1, Math.ceil(allWords.length / STAGE_SIZE))
 }
 
+// Group count: merges tiny trailing groups (< 8 words) into the previous group.
+export function getGroupCount(words: VocabWord[]): number {
+  if (words.length <= STAGE_SIZE) return 1
+  const full = Math.floor(words.length / STAGE_SIZE)
+  const rem  = words.length % STAGE_SIZE
+  return rem > 0 && rem < 8 ? full : full + (rem > 0 ? 1 : 0)
+}
+
+// Returns words for a 1-based group index; last group absorbs any overflow.
+export function getGroupWords(words: VocabWord[], groupIdx: number): VocabWord[] {
+  const total = getGroupCount(words)
+  const start = (groupIdx - 1) * STAGE_SIZE
+  return groupIdx >= total ? words.slice(start) : words.slice(start, start + STAGE_SIZE)
+}
+
 export function getStreakMultiplier(streak: number): number {
   if (streak < 3)  return 1
   if (streak < 6)  return 2

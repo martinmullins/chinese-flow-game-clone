@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, shuffle } from '../data'
+import { getWords, getGroupWords, shuffle } from '../data'
 
 interface Props {
   settings: GameSettings
@@ -126,7 +126,10 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
 
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const words = getWords(settings.hskLevels)
+    const levelWords = getWords(settings.hskLevels)
+    const words = settings.groupIndex > 0 && settings.hskLevels.length === 1
+      ? getGroupWords(levelWords, settings.groupIndex)
+      : levelWords
     wordsRef.current      = words
     orderRef.current      = shuffle(words.map((_, i) => i))
     scoresRef.current     = new Array(words.length).fill(0)

@@ -1,16 +1,13 @@
 import { useState } from 'react'
 import { GameSettings, HskLevel, MatchType } from '../types'
-import { getWords } from '../data'
+import { getWords, getGroupCount, getGroupWords } from '../data'
 
 interface Props {
   settings: GameSettings
   onStart: (settings: GameSettings) => void
 }
 
-const HSK_COUNTS: Record<HskLevel, number> = { 1: 152, 2: 153, 3: 100, 4: 30, 5: 20, 6: 0 }
-const STATS_KEY = 'hanziliu_stats'
-
-interface LifetimeStats { gamesPlayed: number; wins: number; sdLosses: number; bestSD: number }
+const HSK_COUNTS: Record<HskLevel, number> = { 1: 150, 2: 149, 3: 100, 4: 30, 5: 20, 6: 0 }
 
 const MATCH_OPTIONS: { id: MatchType; label: string; sub: string }[] = [
   { id: 'hanzi-english', label: '汉字  →  English',   sub: 'See character, choose meaning' },
@@ -18,10 +15,18 @@ const MATCH_OPTIONS: { id: MatchType; label: string; sub: string }[] = [
   { id: 'pinyin-english',label: 'Pīnyīn  →  English', sub: 'See pinyin, choose meaning' },
 ]
 
+const STATS_KEY = 'hanziliu_stats'
+interface LifetimeStats { gamesPlayed: number; wins: number; sdLosses: number; bestSD: number }
+
 export default function MainMenu({ settings, onStart }: Props) {
   const [s, setS] = useState<GameSettings>(settings)
-  const raw = localStorage.getItem(STATS_KEY)
-  const stats: LifetimeStats | null = raw ? JSON.parse(raw) : null
+
+  const singleLevel = s.hskLevels.length === 1
+  const levelWords  = getWords(s.hskLevels)
+  const groupCount  = singleLevel ? getGroupCount(levelWords) : 0
+  const wordCount   = s.groupIndex > 0 && singleLevel
+    ? getGroupWords(levelWords, s.groupIndex).length
+    : levelWords.length
 
   const toggleLevel = (level: HskLevel) => {
     setS(prev => {
@@ -29,11 +34,12 @@ export default function MainMenu({ settings, onStart }: Props) {
       const next = has
         ? prev.hskLevels.filter(l => l !== level)
         : [...prev.hskLevels, level].sort((a, b) => a - b)
-      return { ...prev, hskLevels: next.length === 0 ? [level] : next }
+      return { ...prev, hskLevels: next.length === 0 ? [level] : next, groupIndex: 0 }
     })
   }
 
-  const wordCount = getWords(s.hskLevels).length
+  const raw = localStorage.getItem(STATS_KEY)
+  const stats: LifetimeStats | null = raw ? JSON.parse(raw) : null
 
   return (
     <div className="menu-wrap">
@@ -59,8 +65,38 @@ export default function MainMenu({ settings, onStart }: Props) {
               </button>
             ))}
           </div>
-          <div className="word-pill">{wordCount} words</div>
         </section>
+
+        {/* Group picker — single level only */}
+        {singleLevel && groupCount > 1 && (
+          <section className="menu-section">
+            <h2 className="section-label">Group</h2>
+            <div className="group-grid">
+              <button
+                className={`group-btn${s.groupIndex === 0 ? ' active' : ''}`}
+                onClick={() => setS(prev => ({ ...prev, groupIndex: 0 }))}
+              >
+                <span className="group-label">All</span>
+                <span className="group-count">{levelWords.length}w</span>
+              </button>
+              {Array.from({ length: groupCount }, (_, i) => i + 1).map(g => {
+                const gw = getGroupWords(levelWords, g)
+                return (
+                  <button
+                    key={g}
+                    className={`group-btn${s.groupIndex === g ? ' active' : ''}`}
+                    onClick={() => setS(prev => ({ ...prev, groupIndex: g }))}
+                  >
+                    <span className="group-label">G{g}</span>
+                    <span className="group-count">{gw.length}w</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        <div className="word-pill">{wordCount} words selected</div>
 
         {/* Match Type */}
         <section className="menu-section">
@@ -132,7 +168,7 @@ export default function MainMenu({ settings, onStart }: Props) {
         </button>
 
         {wordCount < 8 && (
-          <p className="warn-text">Select at least one HSK level with words.</p>
+          <p className="warn-text">Need at least 8 words to play.</p>
         )}
 
       </div>

@@ -13,6 +13,7 @@ export type MatchType = 'hanzi-english' | 'hanzi-pinyin' | 'pinyin-english'
 
 export interface GameSettings {
   hskLevels: HskLevel[]
+  groupIndex: number      // 0 = all; 1+ = specific group (only applies when single level selected)
   matchType: MatchType
   showPinyinHint: boolean
 }

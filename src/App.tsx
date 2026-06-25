@@ -6,6 +6,7 @@ import ResultsScreen from './components/ResultsScreen'
 
 const DEFAULT_SETTINGS: GameSettings = {
   hskLevels: [1],
+  groupIndex: 0,
   matchType: 'hanzi-english',
   showPinyinHint: false,
 }
