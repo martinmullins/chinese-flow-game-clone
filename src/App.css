@@ -317,7 +317,18 @@ button:disabled { cursor: default; }
   50%       { opacity: 0.65; }
 }
 
-.topbar-right { margin-left: auto; display: flex; align-items: center; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.topbar-mute {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 1rem;
+  padding: 4px 7px;
+  line-height: 1;
+  color: var(--text-2);
+}
+.topbar-mute:hover { border-color: var(--border-hi); }
 
 .sd-remain {
   font-size: 0.85rem;
@@ -502,6 +513,26 @@ button:disabled { cursor: default; }
 .phase-card h2 { font-size: clamp(1.6rem, 5vw, 2.4rem); color: var(--text); font-family: 'Noto Sans SC', serif; }
 .phase-card p  { font-size: 0.95rem; color: var(--text-2); line-height: 1.6; }
 .phase-sub { font-size: 0.82rem !important; color: var(--text-3) !important; }
+
+/* Lifetime stats in menu */
+.menu-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.menu-stat {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.ms-val { font-size: 1.2rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.ms-lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); }
 
 /* ════════════════════════════════════════════════════════════════════════════
    RESULTS

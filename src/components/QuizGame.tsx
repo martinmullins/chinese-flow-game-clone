@@ -8,6 +8,9 @@ interface Props {
   onMenu: () => void
 }
 
+const MUTE_KEY  = 'hanziliu_muted'
+const STATS_KEY = 'hanziliu_stats'
+
 // ── TTS ─────────────────────────────────────────────────────────────────────
 let ttsVoice: SpeechSynthesisVoice | null = null
 function loadVoice() {
@@ -29,6 +32,20 @@ function speak(hanzi: string) {
   u.rate = 0.85
   if (ttsVoice) u.voice = ttsVoice
   window.speechSynthesis.speak(u)
+}
+
+function saveStats(result: GameResult) {
+  const raw = localStorage.getItem(STATS_KEY)
+  const s = raw ? JSON.parse(raw) : { gamesPlayed: 0, wins: 0, sdLosses: 0, bestSD: 0 }
+  s.gamesPlayed++
+  if (result.sdCompleted) {
+    s.wins++
+    s.bestSD = Math.max(s.bestSD, result.sdCount)
+  } else if (result.sdReached) {
+    s.sdLosses++
+    s.bestSD = Math.max(s.bestSD, result.sdCount)
+  }
+  localStorage.setItem(STATS_KEY, JSON.stringify(s))
 }
 
 // SD eligible thresholds (mirror original game)
@@ -68,6 +85,18 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const [sdCount, setSdCount]   = useState(0)
   const [sdTotal, setSdTotal]   = useState(0)
+  const [muted, setMuted]       = useState(() => localStorage.getItem(MUTE_KEY) === 'true')
+  const mutedRef                = useRef(muted)
+  mutedRef.current = muted
+
+  const toggleMute = useCallback(() => {
+    setMuted(prev => {
+      const next = !prev
+      localStorage.setItem(MUTE_KEY, String(next))
+      if (next) window.speechSynthesis.cancel()
+      return next
+    })
+  }, [])
 
   // ── Build a question for normal phase (sliding window of 8) ─────────────────
   const buildNormalQ = useCallback((): Question => {
@@ -173,7 +202,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     if (sdCountRef.current >= wordsRef.current.length) {
       setPhase('win')
       setTimeout(() => {
-        onGameOver({
+        const r: GameResult = {
           hskLevels: settings.hskLevels,
           matchType: settings.matchType,
           phase1Misses: missesRef.current,
@@ -184,7 +213,9 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
           correctWords: correctWordsRef.current,
           wrongWords: wrongWordsRef.current,
           timeUsed: Math.round((Date.now() - startTimeRef.current) / 1000),
-        })
+        }
+        saveStats(r)
+        onGameOver(r)
       }, 3000)
       return
     }
@@ -201,7 +232,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     if (chosen !== null || !q) return
     if (q.removedIdxs.has(idx)) return
 
-    speak(q.target.hanzi)
+    if (!mutedRef.current) speak(q.target.hanzi)
     setChosen(idx)
 
     if (idx === q.correctIdx) {
@@ -218,7 +249,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       if (phase === 'sd') {
         setPhase('lose')
         setTimeout(() => {
-          onGameOver({
+          const r: GameResult = {
             hskLevels: settings.hskLevels,
             matchType: settings.matchType,
             phase1Misses: missesRef.current,
@@ -229,7 +260,9 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
             correctWords: correctWordsRef.current,
             wrongWords: wrongWordsRef.current,
             timeUsed: Math.round((Date.now() - startTimeRef.current) / 1000),
-          })
+          }
+          saveStats(r)
+          onGameOver(r)
         }, 3000)
       } else {
         missesRef.current++
@@ -304,6 +337,9 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
           {phase === 'normal' && missesRef.current > 0 && (
             <span className="miss-count">✗ {missesRef.current}</span>
           )}
+          <button className="topbar-mute" onClick={toggleMute} title={muted ? 'Unmute' : 'Mute'}>
+            {muted ? '🔇' : '🔊'}
+          </button>
         </div>
       </div>
 

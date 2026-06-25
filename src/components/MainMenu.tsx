@@ -8,6 +8,9 @@ interface Props {
 }
 
 const HSK_COUNTS: Record<HskLevel, number> = { 1: 152, 2: 153, 3: 100, 4: 30, 5: 20, 6: 0 }
+const STATS_KEY = 'hanziliu_stats'
+
+interface LifetimeStats { gamesPlayed: number; wins: number; sdLosses: number; bestSD: number }
 
 const MATCH_OPTIONS: { id: MatchType; label: string; sub: string }[] = [
   { id: 'hanzi-english', label: '汉字  →  English',   sub: 'See character, choose meaning' },
@@ -17,6 +20,8 @@ const MATCH_OPTIONS: { id: MatchType; label: string; sub: string }[] = [
 
 export default function MainMenu({ settings, onStart }: Props) {
   const [s, setS] = useState<GameSettings>(settings)
+  const raw = localStorage.getItem(STATS_KEY)
+  const stats: LifetimeStats | null = raw ? JSON.parse(raw) : null
 
   const toggleLevel = (level: HskLevel) => {
     setS(prev => {
@@ -93,6 +98,30 @@ export default function MainMenu({ settings, onStart }: Props) {
           <p>Phase 1 — work through all words. Miss one? It needs 2 more correct to clear.</p>
           <p>Phase 2 — 💀 Sudden Death. Every word, one shot, no mistakes.</p>
         </div>
+
+        {stats && (
+          <section className="menu-section">
+            <h2 className="section-label">Lifetime Stats</h2>
+            <div className="menu-stats-grid">
+              <div className="menu-stat">
+                <span className="ms-val">{stats.gamesPlayed}</span>
+                <span className="ms-lbl">Played</span>
+              </div>
+              <div className="menu-stat">
+                <span className="ms-val">{stats.wins}</span>
+                <span className="ms-lbl">Wins</span>
+              </div>
+              <div className="menu-stat">
+                <span className="ms-val">{stats.sdLosses}</span>
+                <span className="ms-lbl">SD Losses</span>
+              </div>
+              <div className="menu-stat">
+                <span className="ms-val">{stats.bestSD}</span>
+                <span className="ms-lbl">Best SD</span>
+              </div>
+            </div>
+          </section>
+        )}
 
         <button
           className="start-btn"
