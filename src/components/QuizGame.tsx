@@ -85,6 +85,8 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
   const [sdCount, setSdCount]   = useState(0)
   const [sdTotal, setSdTotal]   = useState(0)
+  const [cleared, setCleared]   = useState(0)
+  const clearedRef              = useRef(0)
   const [muted, setMuted]       = useState(() => localStorage.getItem(MUTE_KEY) === 'true')
   const mutedRef                = useRef(muted)
   mutedRef.current = muted
@@ -139,7 +141,9 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     startTimeRef.current  = Date.now()
     sdOrderRef.current    = shuffle(words.map((_, i) => i))
     sdCountRef.current    = 0
+    clearedRef.current    = 0
     setSdTotal(words.length)
+    setCleared(0)
     setQ(buildNormalQ())
   }, []) // eslint-disable-line
 
@@ -175,6 +179,8 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     routineIdxRef.current++
 
     if (scores[order[r]] <= 0) {
+      clearedRef.current++
+      setCleared(clearedRef.current)
       const maxR = Math.max(0, words.length - 8)
       rRef.current = Math.min(r + 1, maxR)
       if (rRef.current >= maxR && r >= maxR) {
@@ -345,6 +351,13 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
           </button>
         </div>
       </div>
+
+      {/* ── Phase 1 progress bar ── */}
+      {phase === 'normal' && sdTotal > 0 && (
+        <div className="sd-track">
+          <div className="p1-fill" style={{ width: `${(cleared / sdTotal) * 100}%` }} />
+        </div>
+      )}
 
       {/* ── SD progress bar ── */}
       {phase === 'sd' && (
