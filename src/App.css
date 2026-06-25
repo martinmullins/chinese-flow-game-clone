@@ -383,6 +383,12 @@ button:disabled { cursor: default; }
   font-weight: 600;
 }
 
+.cleared-count {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .topbar-mute {
   background: var(--raised);
   border: 1px solid var(--border);
@@ -394,24 +400,33 @@ button:disabled { cursor: default; }
 }
 .topbar-mute:hover { border-color: var(--border-hi); }
 
-/* SD progress bar */
-.sd-track {
-  height: 3px;
+/* Countdown timer bar */
+.timer-track {
+  height: 5px;
   background: var(--raised);
   flex-shrink: 0;
+  overflow: hidden;
+}
+.timer-fill {
+  height: 100%;
+  transition: background 0.4s ease;
+  /* width updated by rAF — no CSS transition to keep it real-time */
+}
+
+/* SD progress bar (results screen) */
+.sd-track {
+  height: 8px;
+  background: var(--raised);
+  border-radius: 4px;
+  overflow: hidden;
 }
 .sd-fill {
   height: 100%;
   background: var(--red);
+  border-radius: 4px;
   transition: width 0.4s ease;
 }
 .sd-fill.won { background: var(--green); }
-
-.p1-fill {
-  height: 100%;
-  background: var(--blue);
-  transition: width 0.5s ease;
-}
 
 /* Target area */
 .target-area {
@@ -528,6 +543,26 @@ button:disabled { cursor: default; }
   border-radius: var(--r-sm);
   opacity: 0.5;
 }
+
+/* Two-line option buttons (hanzi-english mode) */
+.options-grid.two-line .option-btn {
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.2;
+}
+.opt-pinyin {
+  font-size: 0.68rem;
+  color: var(--text-3);
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+.opt-english {
+  font-size: clamp(0.72rem, 2.3vw, 0.86rem);
+  color: inherit;
+  font-weight: 500;
+}
+.option-btn.correct .opt-pinyin { color: var(--green); opacity: 0.7; }
+.option-btn.wrong   .opt-pinyin { color: var(--red);   opacity: 0.7; }
 
 /* Feedback bar */
 .feedback-bar {
