@@ -9,36 +9,25 @@ export interface VocabWord {
 
 export type HskLevel = 1 | 2 | 3 | 4 | 5 | 6
 
-export type GameMode = 'flow' | 'quiz' | 'rain'
-
 export type MatchType = 'hanzi-english' | 'hanzi-pinyin' | 'pinyin-english'
-
-export type GameVariant = 'standard' | 'time-attack' | 'sudden-death'
 
 export interface GameSettings {
   hskLevels: HskLevel[]
-  gameMode: GameMode
   matchType: MatchType
   showPinyinHint: boolean
-  showEmoji: boolean
-  gameDuration: number
-  gridSize: number
-  gameVariant: GameVariant
-  stageMode: boolean
 }
 
 export interface GameResult {
-  score: number
-  correct: number
-  wrong: number
-  timeUsed: number
-  gameMode: GameMode
   hskLevels: HskLevel[]
+  matchType: MatchType
+  phase1Misses: number
+  sdCompleted: boolean
+  sdReached: boolean
+  sdCount: number
+  sdTotal: number
   correctWords: VocabWord[]
   wrongWords: VocabWord[]
-  maxStreak: number
-  gameVariant: GameVariant
-  stagesCompleted: number
+  timeUsed: number
 }
 
 export type Screen = 'menu' | 'game' | 'results'

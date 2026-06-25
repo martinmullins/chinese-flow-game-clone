@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GameSettings, GameResult, VocabWord } from '../types'
-import { getWords, getRightContent, shuffle, getDistractors, getStreakMultiplier, getStageWords, getTotalStages } from '../data'
-import HUD from './HUD'
+import { getWords, shuffle } from '../data'
 
 interface Props {
   settings: GameSettings
@@ -9,340 +8,352 @@ interface Props {
   onMenu: () => void
 }
 
-const QUESTION_TIME = 10
-
-const TIME_ATTACK_START     = 30
-const TIME_ATTACK_CORRECT   = 5
-const TIME_ATTACK_WRONG     = 3
-const TIME_ATTACK_STAGE_BON = 15
-
-interface Question {
-  word: VocabWord
-  choices: VocabWord[]
-  correctIdx: number
+// ── TTS ─────────────────────────────────────────────────────────────────────
+let ttsVoice: SpeechSynthesisVoice | null = null
+function loadVoice() {
+  const voices = window.speechSynthesis.getVoices()
+  const zh = voices.filter(v => v.lang.startsWith('zh'))
+  ttsVoice =
+    zh.find(v => /male/i.test(v.name)) ||
+    zh.find(v => !/female/i.test(v.name)) ||
+    zh[0] || null
+}
+if (typeof window !== 'undefined') {
+  window.speechSynthesis.onvoiceschanged = loadVoice
+  loadVoice()
+}
+function speak(hanzi: string) {
+  window.speechSynthesis.cancel()
+  const u = new SpeechSynthesisUtterance(hanzi)
+  u.lang = 'zh-CN'
+  u.rate = 0.85
+  if (ttsVoice) u.voice = ttsVoice
+  window.speechSynthesis.speak(u)
 }
 
+// SD eligible thresholds (mirror original game)
+function checkSdEligible(routineIdx: number, totalMisses: number): boolean {
+  if (routineIdx === 8  && totalMisses < 2) return true
+  if (routineIdx === 15 && totalMisses < 3) return true
+  if (routineIdx === 30 && totalMisses < 7) return true
+  return false
+}
+
+interface Question {
+  target: VocabWord
+  choices: VocabWord[]   // 8 items, shuffled; target is among them
+  correctIdx: number
+  removedIdxs: Set<number>
+  missedThisQ: boolean
+}
+
+type Phase = 'normal' | 'sd-enter' | 'sd' | 'win' | 'lose'
+
 export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
-  const isTimeAttack  = settings.gameVariant === 'time-attack'
-  const isSuddenDeath = settings.gameVariant === 'sudden-death'
-  const isStageMode   = settings.stageMode
-  const initLives     = isSuddenDeath ? 1 : 3
-  const initTime      = isTimeAttack  ? TIME_ATTACK_START : settings.gameDuration
+  const wordsRef        = useRef<VocabWord[]>([])
+  const orderRef        = useRef<number[]>([])
+  const scoresRef       = useRef<number[]>([])
+  const rRef            = useRef(0)
+  const routineIdxRef   = useRef(0)
+  const missesRef       = useRef(0)
+  const startTimeRef    = useRef(Date.now())
+  const sdOrderRef      = useRef<number[]>([])
+  const sdCountRef      = useRef(0)
+  const correctWordsRef = useRef<VocabWord[]>([])
+  const wrongWordsRef   = useRef<VocabWord[]>([])
 
-  const [, setPool]               = useState<VocabWord[]>([])
-  const [peekedChoices, setPeekedChoices] = useState<Set<number>>(new Set())
-  const [question, setQuestion]   = useState<Question | null>(null)
-  const [qTime, setQTime]         = useState(QUESTION_TIME)
-  const [chosen, setChosen]       = useState<number | null>(null)
-  const [feedback, setFeedback]   = useState<'correct' | 'wrong' | null>(null)
+  const [phase, setPhase]       = useState<Phase>('normal')
+  const [q, setQ]               = useState<Question | null>(null)
+  const [chosen, setChosen]     = useState<number | null>(null)
+  const [feedback, setFeedback] = useState<'correct' | 'wrong' | null>(null)
+  const [sdCount, setSdCount]   = useState(0)
+  const [sdTotal, setSdTotal]   = useState(0)
 
-  const [score, setScore]           = useState(0)
-  const [lives, setLives]           = useState(initLives)
-  const [streak, setStreak]         = useState(0)
-  const [correct, setCorrect]       = useState(0)
-  const [wrong, setWrong]           = useState(0)
-  const [totalTime, setTotalTime]   = useState(initTime)
-  const [isActive, setIsActive]     = useState(false)
-  const [gameOver, setGameOver]     = useState(false)
-  const [correctWords, setCorrectWords] = useState<VocabWord[]>([])
-  const [wrongWords, setWrongWords]     = useState<VocabWord[]>([])
+  // ── Build a question for normal phase (sliding window of 8) ─────────────────
+  const buildNormalQ = useCallback((): Question => {
+    const words  = wordsRef.current
+    const order  = orderRef.current
+    const r      = rRef.current
+    const N      = words.length
+    const end    = Math.min(r + 8, N)
+    const slice  = order.slice(r, end)
+    const padded = slice.length < 8
+      ? [...slice, ...order.slice(0, 8 - slice.length)]
+      : slice
+    const target    = words[order[r]]
+    const choices   = shuffle(padded.map(idx => words[idx]))
+    const correctIdx = choices.findIndex(w => w.id === target.id)
+    return { target, choices, correctIdx, removedIdxs: new Set(), missedThisQ: false }
+  }, [])
 
-  // Stage mode state
-  const [stage, setStage]               = useState(1)
-  const [stageCorrect, setStageCorrect] = useState(0)
-  const [stageDone, setStageDone]       = useState(false)
+  const buildSdQ = useCallback((): Question => {
+    const words  = wordsRef.current
+    const target = words[sdOrderRef.current[sdCountRef.current]]
+    const others = shuffle(words.filter(w => w.id !== target.id)).slice(0, 7)
+    const choices = shuffle([target, ...others])
+    const correctIdx = choices.findIndex(w => w.id === target.id)
+    return { target, choices, correctIdx, removedIdxs: new Set(), missedThisQ: false }
+  }, [])
 
-  const poolRef           = useRef<VocabWord[]>([])
-  const allWordsRef       = useRef<VocabWord[]>([])
-  const livesRef          = useRef(initLives)
-  const streakRef         = useRef(0)
-  const maxStreakRef      = useRef(0)
-  const elapsedRef        = useRef(0)
-  const transitioning     = useRef(false)
-  const gameOverRef       = useRef(false)
-  const stageRef          = useRef(1)
-  const stageCorrectRef   = useRef(0)
-  const stageSizeRef      = useRef(0)
-  const totalStagesRef    = useRef(0)
-  const stagesCompletedRef = useRef(0)
-
-  // ── Init ────────────────────────────────────────────────────────────────
+  // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const words = getWords(settings.hskLevels)
-    allWordsRef.current = words
-    totalStagesRef.current = isStageMode ? getTotalStages(words) : 1
-    setPool(words)
-    loadStage(words, 1)
-    setIsActive(true)
-  }, [])
+    wordsRef.current      = words
+    orderRef.current      = shuffle(words.map((_, i) => i))
+    scoresRef.current     = new Array(words.length).fill(0)
+    rRef.current          = 0
+    routineIdxRef.current = 0
+    missesRef.current     = 0
+    startTimeRef.current  = Date.now()
+    sdOrderRef.current    = shuffle(words.map((_, i) => i))
+    sdCountRef.current    = 0
+    setSdTotal(words.length)
+    setQ(buildNormalQ())
+  }, []) // eslint-disable-line
 
-  const loadStage = useCallback((allWords: VocabWord[], stageNum: number) => {
-    const stageWords = isStageMode ? getStageWords(allWords, stageNum) : allWords
-    stageSizeRef.current = stageWords.length
-    stageCorrectRef.current = 0
-    setStageCorrect(0)
-    poolRef.current = shuffle([...stageWords])
-    nextQuestion()
-  }, [isStageMode])
+  // ── Enter sudden death ───────────────────────────────────────────────────────
+  const enterSD = useCallback(() => {
+    sdOrderRef.current = shuffle(wordsRef.current.map((_, i) => i))
+    sdCountRef.current = 0
+    setSdCount(0)
+    setPhase('sd-enter')
+    setChosen(null)
+    setFeedback(null)
+    setTimeout(() => {
+      setPhase('sd')
+      setQ(buildSdQ())
+    }, 2200)
+  }, [buildSdQ])
 
-  // ── Overall timer ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isActive || totalTime <= 0 || stageDone) return
-    const t = setTimeout(() => {
-      setTotalTime(s => s - 1)
-      elapsedRef.current += 1
-    }, 1000)
-    return () => clearTimeout(t)
-  }, [isActive, totalTime, stageDone])
+  // ── Correct in normal phase ──────────────────────────────────────────────────
+  const normalCorrect = useCallback((currentQ: Question) => {
+    const order  = orderRef.current
+    const scores = scoresRef.current
+    const words  = wordsRef.current
+    const r      = rRef.current
 
-  // ── End game ─────────────────────────────────────────────────────────────
-  const endGame = useCallback(() => {
-    if (gameOverRef.current) return
-    gameOverRef.current = true
-    setIsActive(false)
-    setGameOver(true)
-  }, [])
+    correctWordsRef.current = [...correctWordsRef.current, currentQ.target]
 
-  useEffect(() => {
-    if (totalTime <= 0 && isActive) endGame()
-  }, [totalTime])
+    if (currentQ.missedThisQ) {
+      scores[order[r]] = 2
+    } else {
+      scores[order[r]]--
+    }
 
-  useEffect(() => {
-    if (!gameOver) return
-    const t = setTimeout(() => {
-      onGameOver({
-        score,
-        correct,
-        wrong,
-        timeUsed: elapsedRef.current,
-        gameMode: 'quiz',
-        hskLevels: settings.hskLevels,
-        correctWords,
-        wrongWords,
-        maxStreak: maxStreakRef.current,
-        gameVariant: settings.gameVariant,
-        stagesCompleted: stagesCompletedRef.current,
-      })
-    }, 600)
-    return () => clearTimeout(t)
-  }, [gameOver])
+    routineIdxRef.current++
 
-  // ── Per-question timer ───────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isActive || chosen !== null || !question || stageDone) return
-    if (qTime <= 0) { handleTimeout(); return }
-    const t = setTimeout(() => setQTime(s => s - 1), 1000)
-    return () => clearTimeout(t)
-  }, [isActive, qTime, chosen, question, stageDone])
+    if (scores[order[r]] <= 0) {
+      const maxR = Math.max(0, words.length - 8)
+      rRef.current = Math.min(r + 1, maxR)
+      if (rRef.current >= maxR && r >= maxR) {
+        // All words cleared
+        enterSD()
+        return
+      }
+    }
 
-  // ── Stage advance ────────────────────────────────────────────────────────
-  const advanceStage = useCallback(() => {
-    const nextStage = stageRef.current + 1
-    stagesCompletedRef.current += 1
-
-    if (nextStage > totalStagesRef.current) {
-      setStageDone(false)
-      endGame()
+    if (checkSdEligible(routineIdxRef.current, missesRef.current)) {
+      enterSD()
       return
     }
 
-    stageRef.current = nextStage
-    setStage(nextStage)
-    setStageDone(false)
-    if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_STAGE_BON, 999))
-    loadStage(allWordsRef.current, nextStage)
-  }, [endGame, isTimeAttack, loadStage])
+    setTimeout(() => {
+      setChosen(null)
+      setFeedback(null)
+      setQ(buildNormalQ())
+    }, 700)
+  }, [buildNormalQ, enterSD])
 
-  // ── Next question ────────────────────────────────────────────────────────
-  const nextQuestion = useCallback(() => {
-    if (poolRef.current.length === 0) {
-      if (isStageMode) {
-        // All words answered correctly — stage done!
-        setStageDone(true)
-        return
-      }
-      poolRef.current = shuffle([...allWordsRef.current])
+  // ── Correct in SD phase ──────────────────────────────────────────────────────
+  const sdCorrect = useCallback((currentQ: Question) => {
+    correctWordsRef.current = [...correctWordsRef.current, currentQ.target]
+    sdCountRef.current++
+    setSdCount(sdCountRef.current)
+
+    if (sdCountRef.current >= wordsRef.current.length) {
+      setPhase('win')
+      setTimeout(() => {
+        onGameOver({
+          hskLevels: settings.hskLevels,
+          matchType: settings.matchType,
+          phase1Misses: missesRef.current,
+          sdCompleted: true,
+          sdReached: true,
+          sdCount: sdCountRef.current,
+          sdTotal: wordsRef.current.length,
+          correctWords: correctWordsRef.current,
+          wrongWords: wrongWordsRef.current,
+          timeUsed: Math.round((Date.now() - startTimeRef.current) / 1000),
+        })
+      }, 3000)
+      return
     }
 
-    const word = poolRef.current[0]
-    poolRef.current = poolRef.current.slice(1)
+    setTimeout(() => {
+      setChosen(null)
+      setFeedback(null)
+      setQ(buildSdQ())
+    }, 700)
+  }, [buildSdQ, onGameOver, settings])
 
-    const distractors = getDistractors(word, allWordsRef.current, 3)
-    const allChoices  = shuffle([word, ...distractors])
-    const correctIdx  = allChoices.findIndex(c => c.id === word.id)
-
-    setQuestion({ word, choices: allChoices, correctIdx })
-    setQTime(QUESTION_TIME)
-    setChosen(null)
-    setFeedback(null)
-    setPeekedChoices(new Set())
-    transitioning.current = false
-  }, [isStageMode])
-
-  const advance = useCallback(() => {
-    if (transitioning.current) return
-    transitioning.current = true
-    setTimeout(() => nextQuestion(), 1000)
-  }, [nextQuestion])
-
+  // ── Option click ─────────────────────────────────────────────────────────────
   const handleChoice = useCallback((idx: number) => {
-    if (chosen !== null || !question || transitioning.current || gameOverRef.current) return
+    if (chosen !== null || !q) return
+    if (q.removedIdxs.has(idx)) return
+
+    speak(q.target.hanzi)
     setChosen(idx)
 
-    if (idx === question.correctIdx) {
-      streakRef.current += 1
-      setStreak(streakRef.current)
-      if (streakRef.current > maxStreakRef.current) maxStreakRef.current = streakRef.current
-      const points = getStreakMultiplier(streakRef.current)
-
+    if (idx === q.correctIdx) {
       setFeedback('correct')
-      setScore(s => s + points)
-      setCorrect(s => s + 1)
-      setCorrectWords(ws => [...ws, question.word])
-      if (isTimeAttack) setTotalTime(t => Math.min(t + TIME_ATTACK_CORRECT, 999))
-
-      if (isStageMode) {
-        stageCorrectRef.current += 1
-        setStageCorrect(stageCorrectRef.current)
-        // Don't re-add to pool — word is permanently cleared
+      if (phase === 'sd') {
+        sdCorrect(q)
+      } else {
+        normalCorrect(q)
       }
-      advance()
     } else {
-      streakRef.current = 0
-      setStreak(0)
-
       setFeedback('wrong')
-      setWrong(s => s + 1)
-      setWrongWords(ws => [...ws, question.word])
-      if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
+      wrongWordsRef.current = [...wrongWordsRef.current, q.target]
 
-      if (isStageMode) {
-        poolRef.current = [...poolRef.current, question.word]
+      if (phase === 'sd') {
+        setPhase('lose')
+        setTimeout(() => {
+          onGameOver({
+            hskLevels: settings.hskLevels,
+            matchType: settings.matchType,
+            phase1Misses: missesRef.current,
+            sdCompleted: false,
+            sdReached: true,
+            sdCount: sdCountRef.current,
+            sdTotal: wordsRef.current.length,
+            correctWords: correctWordsRef.current,
+            wrongWords: wrongWordsRef.current,
+            timeUsed: Math.round((Date.now() - startTimeRef.current) / 1000),
+          })
+        }, 3000)
+      } else {
+        missesRef.current++
+        // Remove one random remaining wrong option (not the one just clicked)
+        const removable = q.choices
+          .map((_, i) => i)
+          .filter(i => i !== q.correctIdx && !q.removedIdxs.has(i) && i !== idx)
+        const toRemove = removable[Math.floor(Math.random() * removable.length)]
+        const newRemoved = new Set(q.removedIdxs)
+        if (toRemove !== undefined) newRemoved.add(toRemove)
+        setQ({ ...q, removedIdxs: newRemoved, missedThisQ: true })
+        setTimeout(() => {
+          setChosen(null)
+          setFeedback(null)
+        }, 700)
       }
-
-      livesRef.current -= 1
-      setLives(livesRef.current)
-      if (livesRef.current <= 0) { endGame(); return }
-      advance()
     }
-  }, [chosen, question, advance, endGame, isTimeAttack, isSuddenDeath, isStageMode])
+  }, [chosen, q, phase, normalCorrect, sdCorrect, onGameOver, settings])
 
-  const handleTimeout = useCallback(() => {
-    if (chosen !== null || !question || transitioning.current || gameOverRef.current) return
-    setChosen(-1)
-    setFeedback('wrong')
-    streakRef.current = 0
-    setStreak(0)
-    setWrong(s => s + 1)
-    if (question) {
-      setWrongWords(ws => [...ws, question.word])
-      if (isStageMode) poolRef.current = [...poolRef.current, question.word]
-    }
-    if (isTimeAttack) setTotalTime(t => Math.max(t - TIME_ATTACK_WRONG, 0))
+  if (!q) return null
 
-    livesRef.current -= 1
-    setLives(livesRef.current)
-    if (livesRef.current <= 0) { endGame(); return }
-    advance()
-  }, [chosen, question, advance, endGame, isTimeAttack, isStageMode])
-
-  if (!question) return null
-
-  const timeRatio  = qTime / QUESTION_TIME
-  const showPinyin = settings.showPinyinHint || settings.matchType === 'hanzi-pinyin'
+  const isSd = phase === 'sd' || phase === 'sd-enter'
+  const targetText = settings.matchType === 'pinyin-english' ? q.target.pinyin : q.target.hanzi
+  const showPinyin = settings.showPinyinHint && settings.matchType !== 'pinyin-english'
+  const optionText = (w: VocabWord) =>
+    settings.matchType === 'hanzi-pinyin' ? w.pinyin : w.english
 
   return (
-    <div className="quiz-screen">
-      <HUD
-        score={score}
-        lives={lives}
-        maxLives={initLives}
-        timeLeft={totalTime}
-        correct={correct}
-        wrong={wrong}
-        streak={streak}
-        stageInfo={isStageMode ? { stage, total: totalStagesRef.current, done: stageCorrect, size: stageSizeRef.current } : undefined}
-        onMenu={onMenu}
-      />
+    <div className="game-screen">
 
-      <div className="quiz-body">
-        <div className="quiz-word-card">
-          {settings.matchType === 'pinyin-english' ? (
-            <span className="quiz-word-hanzi" style={{ fontSize: '2rem' }}>{question.word.pinyin}</span>
-          ) : (
-            <>
-              <span className="quiz-word-hanzi">{question.word.hanzi}</span>
-              {showPinyin && <span className="quiz-word-pinyin">{question.word.pinyin}</span>}
-            </>
-          )}
-        </div>
-
-        <div className="quiz-time-bar">
-          <div className={`quiz-time-fill ${timeRatio < 0.3 ? 'low' : ''}`} style={{ width: `${timeRatio * 100}%` }} />
-        </div>
-
-        <div className="quiz-choices">
-          {question.choices.map((choice, i) => {
-            let cls = 'quiz-choice'
-            if (chosen !== null) {
-              if (i === question.correctIdx) cls += ' correct'
-              else if (i === chosen) cls += ' wrong'
-            }
-            const useEmoji = settings.showEmoji && !!choice.emoji && settings.matchType !== 'hanzi-pinyin'
-            const isPeeked = peekedChoices.has(i)
-            return (
-              <button
-                key={choice.id}
-                className={cls}
-                onClick={() => handleChoice(i)}
-                disabled={chosen !== null}
-                style={{ position: 'relative', flexDirection: 'column', gap: 4 }}
-              >
-                {useEmoji && !isPeeked ? (
-                  <>
-                    <span style={{ fontSize: '1.8rem', lineHeight: 1 }}>{choice.emoji}</span>
-                    <span className="peek-btn" role="button" onClick={e => { e.stopPropagation(); setPeekedChoices(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n }) }}>?</span>
-                  </>
-                ) : (
-                  <>
-                    {getRightContent(choice, settings.matchType)}
-                    {useEmoji && isPeeked && (
-                      <span className="peek-btn peek-btn-close" role="button" onClick={e => { e.stopPropagation(); setPeekedChoices(prev => { const n = new Set(prev); n.delete(i); return n }) }}>{choice.emoji}</span>
-                    )}
-                  </>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className={`quiz-feedback ${feedback ?? ''}`}>
-          {feedback === 'correct' && '✓ Correct!'}
-          {feedback === 'wrong' && `✗ ${getRightContent(question.word, settings.matchType)}`}
-        </div>
-
-        <div className="quiz-progress">
-          {correct + wrong} answered · {Math.round((correct / Math.max(1, correct + wrong)) * 100)}% correct
-          {isStageMode && ` · ${poolRef.current.length + (chosen === null ? 0 : 0)} left in stage`}
-        </div>
-      </div>
-
-      {/* Stage Complete overlay */}
-      {stageDone && !gameOver && (
-        <div className="stage-complete-overlay">
-          <div className="stage-complete-card">
-            <div className="stage-complete-emoji">🎉</div>
-            <h2>Stage {stage} Complete!</h2>
-            <p className="stage-complete-sub">
-              {stageSizeRef.current} words mastered
-              {isTimeAttack && <> · <span style={{ color: 'var(--green)' }}>+{TIME_ATTACK_STAGE_BON}s bonus</span></>}
-            </p>
-            <button className="stage-continue-btn" onClick={advanceStage}>
-              {stageRef.current < totalStagesRef.current ? `Stage ${stage + 1} →` : 'See Results'}
-            </button>
+      {/* ── Overlay screens ── */}
+      {phase === 'sd-enter' && (
+        <div className="phase-overlay">
+          <div className="phase-card">
+            <div className="phase-icon">💀</div>
+            <h2>突然死亡</h2>
+            <p>Sudden Death</p>
+            <p className="phase-sub">All {sdTotal} words. One mistake ends it.</p>
           </div>
         </div>
       )}
+      {phase === 'win' && (
+        <div className="phase-overlay win">
+          <div className="phase-card">
+            <div className="phase-icon">🏆</div>
+            <h2>完美！</h2>
+            <p>Perfect — all {sdTotal} words<br />cleared in Sudden Death.</p>
+          </div>
+        </div>
+      )}
+      {phase === 'lose' && (
+        <div className="phase-overlay lose">
+          <div className="phase-card">
+            <div className="phase-icon">💥</div>
+            <h2>游戏结束</h2>
+            <p>Game Over</p>
+            <p className="phase-sub">Reached {sdCount} / {sdTotal} in Sudden Death</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Top bar ── */}
+      <div className="game-topbar">
+        <button className="topbar-back" onClick={onMenu}>← Menu</button>
+        <div className={`phase-badge ${isSd ? 'sd' : 'p1'}`}>
+          {isSd ? '💀 Sudden Death' : 'Phase 1'}
+        </div>
+        <div className="topbar-right">
+          {phase === 'sd' && (
+            <span className="sd-remain">{sdTotal - sdCount} left</span>
+          )}
+          {phase === 'normal' && missesRef.current > 0 && (
+            <span className="miss-count">✗ {missesRef.current}</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── SD progress bar ── */}
+      {phase === 'sd' && (
+        <div className="sd-track">
+          <div className="sd-fill" style={{ width: `${(sdCount / sdTotal) * 100}%` }} />
+        </div>
+      )}
+
+      {/* ── Target word ── */}
+      <div className="target-area">
+        <div className={`target-card${feedback ? ' ' + feedback : ''}`}>
+          <span className="target-word">{targetText}</span>
+          {showPinyin && <span className="target-pinyin">{q.target.pinyin}</span>}
+        </div>
+      </div>
+
+      {/* ── 8 options ── */}
+      <div className="options-grid">
+        {q.choices.map((choice, i) => {
+          if (q.removedIdxs.has(i)) {
+            return <div key={choice.id + '-removed'} className="option-slot removed" />
+          }
+          let cls = 'option-btn'
+          if (chosen !== null) {
+            if (i === q.correctIdx) cls += ' correct'
+            else if (i === chosen)  cls += ' wrong'
+          }
+          return (
+            <button
+              key={choice.id}
+              className={cls}
+              onClick={() => handleChoice(i)}
+              disabled={chosen !== null}
+            >
+              {optionText(choice)}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Feedback ── */}
+      <div className={`feedback-bar${feedback ? ' ' + feedback : ''}`}>
+        {feedback === 'correct' && '✓  Correct'}
+        {feedback === 'wrong'   && (isSd
+          ? '✗  Game Over'
+          : `✗  ${optionText(q.target)}`
+        )}
+      </div>
     </div>
   )
 }

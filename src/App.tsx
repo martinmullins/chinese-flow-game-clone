@@ -1,44 +1,28 @@
 import { useState } from 'react'
-import { GameSettings, GameResult, Screen } from './types'
+import { GameSettings, GameResult } from './types'
 import MainMenu from './components/MainMenu'
-import FlowGame from './components/FlowGame'
 import QuizGame from './components/QuizGame'
-import RainGame from './components/RainGame'
 import ResultsScreen from './components/ResultsScreen'
 
 const DEFAULT_SETTINGS: GameSettings = {
   hskLevels: [1],
-  gameMode: 'flow',
   matchType: 'hanzi-english',
   showPinyinHint: false,
-  showEmoji: true,
-  gameDuration: 180,
-  gridSize: 5,
-  gameVariant: 'standard',
-  stageMode: false,
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('menu')
+  const [screen, setScreen]   = useState<'menu' | 'game' | 'results'>('menu')
   const [settings, setSettings] = useState<GameSettings>(DEFAULT_SETTINGS)
-  const [result, setResult] = useState<GameResult | null>(null)
+  const [result, setResult]   = useState<GameResult | null>(null)
 
-  const handleStart = (newSettings: GameSettings) => {
-    setSettings(newSettings)
+  const handleStart = (s: GameSettings) => {
+    setSettings(s)
     setScreen('game')
   }
 
-  const handleGameOver = (gameResult: GameResult) => {
-    setResult(gameResult)
+  const handleGameOver = (r: GameResult) => {
+    setResult(r)
     setScreen('results')
-  }
-
-  const handlePlayAgain = () => {
-    setScreen('game')
-  }
-
-  const handleMenu = () => {
-    setScreen('menu')
   }
 
   if (screen === 'menu') {
@@ -50,41 +34,17 @@ export default function App() {
       <ResultsScreen
         result={result}
         settings={settings}
-        onPlayAgain={handlePlayAgain}
-        onMenu={handleMenu}
+        onPlayAgain={() => setScreen('game')}
+        onMenu={() => setScreen('menu')}
       />
     )
   }
 
-  if (settings.gameMode === 'flow') {
-    return (
-      <FlowGame
-        settings={settings}
-        onGameOver={handleGameOver}
-        onMenu={handleMenu}
-      />
-    )
-  }
-
-  if (settings.gameMode === 'quiz') {
-    return (
-      <QuizGame
-        settings={settings}
-        onGameOver={handleGameOver}
-        onMenu={handleMenu}
-      />
-    )
-  }
-
-  if (settings.gameMode === 'rain') {
-    return (
-      <RainGame
-        settings={settings}
-        onGameOver={handleGameOver}
-        onMenu={handleMenu}
-      />
-    )
-  }
-
-  return null
+  return (
+    <QuizGame
+      settings={settings}
+      onGameOver={handleGameOver}
+      onMenu={() => setScreen('menu')}
+    />
+  )
 }
