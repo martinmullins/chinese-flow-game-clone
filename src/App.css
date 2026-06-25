@@ -30,7 +30,7 @@ html, body, #root {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -73,7 +73,7 @@ button:disabled { cursor: default; }
 .menu-header { text-align: center; margin-bottom: 8px; }
 
 .menu-logo {
-  font-family: 'Noto Sans SC', serif;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
   font-size: clamp(3.5rem, 12vw, 6rem);
   font-weight: 700;
   background: linear-gradient(135deg, #e63946 0%, #f5c842 100%);
@@ -387,7 +387,7 @@ button:disabled { cursor: default; }
 }
 
 .target-word {
-  font-family: 'Noto Sans SC', serif;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
   font-size: clamp(2.8rem, 8vw, 4.5rem);
   font-weight: 700;
   color: var(--text);
@@ -529,7 +529,7 @@ button:disabled { cursor: default; }
 .results-icon { font-size: 3.5rem; line-height: 1; margin-bottom: 10px; }
 .results-title {
   font-size: clamp(1.4rem, 5vw, 2rem);
-  font-family: 'Noto Sans SC', serif;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
   color: var(--text);
   margin-bottom: 6px;
 }
