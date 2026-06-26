@@ -425,14 +425,7 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
   const optionText = (w: VocabWord) =>
     settings.matchType === 'hanzi-pinyin' ? w.pinyin : w.english
 
-  // Timer bar color: blue → gold → red as it depletes; always red in SD
-  const timerColor = isSd
-    ? 'var(--red)'
-    : timerPct > 50
-      ? 'var(--blue)'
-      : timerPct > 25
-        ? 'var(--gold)'
-        : 'var(--red)'
+  const timerClass = `timer-fill${isSd ? ' sd-mode' : ''}${timerPct < 25 ? ' low' : ''}`
 
   return (
     <div className="game-screen">
@@ -494,8 +487,8 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       {(phase === 'normal' || phase === 'sd') && (
         <div className="timer-track">
           <div
-            className="timer-fill"
-            style={{ width: `${timerPct}%`, background: timerColor }}
+            className={timerClass}
+            style={{ width: `${timerPct}%` }}
           />
         </div>
       )}
