@@ -293,6 +293,8 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
     const r      = rRef.current
 
     correctWordsRef.current = [...correctWordsRef.current, currentQ.target]
+    routineIdxRef.current++
+    addTimeRef.current += 2000   // +2s on correct (matching original addTime)
 
     if (currentQ.missedThisQ) {
       scores[order[r]] = 2
@@ -300,10 +302,8 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
       scores[order[r]]--
     }
 
-    routineIdxRef.current++
-    addTimeRef.current += 2000   // +2s on correct (matching original addTime)
-
     if (scores[order[r]] <= 0) {
+      // Word fully cleared — advance the window
       clearedRef.current++
       setCleared(clearedRef.current)
       const maxR = Math.max(0, words.length - 8)
@@ -312,6 +312,13 @@ export default function QuizGame({ settings, onGameOver, onMenu }: Props) {
         enterSD()
         return
       }
+    } else {
+      // Word still needs more practice — push it ~3 slots forward so a
+      // different word appears next rather than repeating the same one
+      const wordIdx = order[r]
+      order.splice(r, 1)
+      order.splice(Math.min(r + 3, order.length), 0, wordIdx)
+      // r stays the same; order[r] is now the next fresh word
     }
 
     if (checkSdEligible(routineIdxRef.current, missesRef.current)) {
