@@ -442,67 +442,34 @@ button:disabled { cursor: default; }
 .timer-fill::after {
   content: '';
   position: absolute;
-  right: -5px;
+  right: -4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 10px;
-  height: 10px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: radial-gradient(circle, #ffffff 0%, #ffe870 35%, transparent 100%);
+  background: radial-gradient(circle, #ffffff 0%, #ffe870 40%, transparent 100%);
   box-shadow:
-    0 0  2px  2px #ffffff,
-    0 0  7px  4px #ffe060,
-    0 0 14px  6px #ff9900,
-    0 0 26px  8px #ff4400,
-    0 0 40px 11px rgba(255, 55, 0, 0.45);
-  animation: fuse-burn 0.11s ease-in-out infinite alternate;
+    0 0  2px 1px #ffffff,
+    0 0  6px 3px #ffcc44,
+    0 0 12px 4px #ff7700,
+    0 0 20px 5px rgba(255, 60, 0, 0.25);
+  animation: fuse-burn 0.8s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-/* Faster, brighter flicker when time is critically low */
 .timer-fill.low::after {
-  animation: fuse-burn-critical 0.06s ease-in-out infinite alternate;
+  animation: fuse-burn 0.4s ease-in-out infinite alternate;
 }
 
 @keyframes fuse-burn {
   0% {
-    transform: translateY(-50%) scale(0.80) translateX(1px);
-    box-shadow:
-      0 0  1px  1px #ffffff,
-      0 0  4px  3px #ffe060,
-      0 0  9px  5px #ff9900,
-      0 0 17px  6px #ff4400,
-      0 0 28px  8px rgba(255, 55, 0, 0.30);
+    opacity: 0.82;
+    transform: translateY(-50%) scale(0.90);
   }
   100% {
-    transform: translateY(-50%) scale(1.20) translateX(-1px);
-    box-shadow:
-      0 0  3px  3px #ffffff,
-      0 0  9px  5px #ffe060,
-      0 0 18px  8px #ff9900,
-      0 0 32px 10px #ff4400,
-      0 0 52px 14px rgba(255, 55, 0, 0.55);
-  }
-}
-
-@keyframes fuse-burn-critical {
-  0% {
-    transform: translateY(-50%) scale(0.75) translateX(2px);
-    box-shadow:
-      0 0  2px  2px #ffffff,
-      0 0  6px  4px #ffe060,
-      0 0 14px  6px #ff4400,
-      0 0 24px  8px #cc0000,
-      0 0 36px  9px rgba(200, 0, 0, 0.45);
-  }
-  100% {
-    transform: translateY(-50%) scale(1.30) translateX(-2px);
-    box-shadow:
-      0 0  4px  3px #ffffff,
-      0 0 10px  6px #ffe060,
-      0 0 22px 10px #ff4400,
-      0 0 38px 12px #cc0000,
-      0 0 60px 16px rgba(200, 0, 0, 0.65);
+    opacity: 1;
+    transform: translateY(-50%) scale(1.10);
   }
 }
 
